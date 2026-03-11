@@ -97,7 +97,9 @@ const isDev = import.meta.env?.DEV ?? false
 
 const canvasContainer = ref<HTMLDivElement | null>(null)
 const playerControls = ref<ControlType[]>([])
-const playerCarId = computed(() => roomStore.currentPlayerId ?? 'player1')
+
+// 本玩家的 player ID（用於查找控制分配）
+const myPlayerId = computed(() => roomStore.currentPlayerId ?? 'player1')
 
 // ── 行動裝置方向偵測 ──────────────────────────────────────────
 const isPortrait = ref(false)
@@ -118,16 +120,26 @@ const tryLockLandscape = async () => {
 
 // ── 玩家資訊 ──────────────────────────────────────────────────
 const isHost = computed(() =>
-  gameStore.gamePlayers.find(p => p.id === playerCarId.value)?.isHost ?? false
+  gameStore.gamePlayers.find(p => p.id === myPlayerId.value)?.isHost ?? false
 )
 
 const myTeamId = computed(() => {
-  const a = gameStore.controlAssignments.find(a => a.playerId === playerCarId.value)
+  const a = gameStore.controlAssignments.find(a => a.playerId === myPlayerId.value)
   return a?.teamId ?? 1
 })
 
+// 本玩家隊伍的車輛 ID（以隊伍為單位，非個人 ID）
+const teamCarId = computed(() => `team-${myTeamId.value}`)
+
+// 是否為本隊物理權威（有 accelerate 控制 = 油門/煞車玩家）
+const isAuthority = computed(() => {
+  const assignment = gameStore.controlAssignments.find(a => a.playerId === myPlayerId.value)
+  if (!assignment) return true
+  return assignment.controls.includes(ControlType.ACCELERATE)
+})
+
 const isCarSelector = computed(() =>
-  gameStore.selectorPlayerIds[myTeamId.value] === playerCarId.value
+  gameStore.selectorPlayerIds[myTeamId.value] === myPlayerId.value
 )
 
 const carTeamStatus = computed(() => {
@@ -183,10 +195,10 @@ const teamsInfo = computed(() => {
     }
     const team = teamMap.get(assignment.teamId)!
     const player = players.find(p => p.id === assignment.playerId)
-    const isMe = assignment.playerId === playerCarId.value
-    const memberScore = isMe
+    const isMe = assignment.playerId === myPlayerId.value
+    const memberScore = assignment.teamId === myTeamId.value
       ? score.value
-      : (gameLoop.cars.value.get(assignment.playerId)?.currentScore ?? 0)
+      : (gameLoop.cars.value.get(`team-${assignment.teamId}`)?.currentScore ?? 0)
 
     team.members.push({
       id: assignment.playerId,
@@ -262,18 +274,18 @@ const waitForAllTeamsConfirmed = (): Promise<void> => {
   })
 }
 
-const getCarFileForPlayer = (playerId: string): string => {
-  const assignment = gameStore.controlAssignments.find(a => a.playerId === playerId)
-  if (!assignment) return DEFAULT_CAR_FILE
-  const carId = gameStore.selectedCars[assignment.teamId]
+// 根據 teamCarId（格式 "team-N"）取得車輛 GLB 路徑
+const getCarFileForTeam = (teamCarId: string): string => {
+  const teamId = parseInt(teamCarId.replace('team-', ''), 10)
+  const carId = gameStore.selectedCars[teamId]
   if (!carId || carId === "__default__") return DEFAULT_CAR_FILE
   return carRegistry.find(c => c.id === carId)?.file ?? DEFAULT_CAR_FILE
 }
 
-const getCarStatsForPlayer = (playerId: string): CarStats => {
-  const assignment = gameStore.controlAssignments.find(a => a.playerId === playerId)
-  if (!assignment) return DEFAULT_CAR_STATS
-  const carId = gameStore.selectedCars[assignment.teamId]
+// 根據 teamCarId（格式 "team-N"）取得車輛 stats
+const getCarStatsForTeam = (teamCarId: string): CarStats => {
+  const teamId = parseInt(teamCarId.replace('team-', ''), 10)
+  const carId = gameStore.selectedCars[teamId]
   if (!carId || carId === "__default__") return DEFAULT_CAR_STATS
   return carRegistry.find(c => c.id === carId)?.stats ?? DEFAULT_CAR_STATS
 }
@@ -361,7 +373,7 @@ const loadAndStart = async () => {
     return
   }
 
-  const actualPlayerId = playerCarId.value
+  const actualPlayerId = myPlayerId.value
   const allPlayers = gameStore.gamePlayers.length > 0
     ? gameStore.gamePlayers
     : roomStore.players.map(p => ({ id: p.id, name: p.name, isHost: p.isHost }))
@@ -369,25 +381,51 @@ const loadAndStart = async () => {
   const isMultiplayer = remotePlayers.length > 0
 
   try {
-    playerControls.value = [
+    // 根據控制分配設定本玩家的控制按鍵
+    const myAssignment = gameStore.controlAssignments.find(a => a.playerId === actualPlayerId)
+    playerControls.value = myAssignment?.controls ?? [
       ControlType.ACCELERATE,
       ControlType.BRAKE,
       ControlType.TURN_LEFT,
       ControlType.TURN_RIGHT,
     ]
 
+    // 設定物理權威（有 accelerate 控制的玩家）
+    gameLoop.setPhysicsAuthority(isAuthority.value)
+
+    // 使用隊伍 car ID（team-N）作為本玩家的車輛識別
     await gameLoop.initialize(
       canvasContainer.value as HTMLElement,
       playerControls.value,
-      actualPlayerId,
+      teamCarId.value,
       roomIdToSeed(roomId.value),
     )
 
     if (isMultiplayer) {
       await gameNetwork.connect(actualPlayerId, roomId.value)
+
+      // 接收遠端車輛狀態：將 senderId 對應到隊伍 car ID
       gameNetwork.onRemoteCarState((senderId, state) => {
-        gameLoop.updateCarState(senderId, state)
+        const senderAssignment = gameStore.controlAssignments.find(a => a.playerId === senderId)
+        if (!senderAssignment) return
+        const senderTeamCarId = `team-${senderAssignment.teamId}`
+        // 若我是物理權威且是自己隊伍的車，不覆蓋本地物理計算結果
+        const isOurCar = senderAssignment.teamId === myTeamId.value
+        if (!isOurCar || !isAuthority.value) {
+          gameLoop.updateCarState(senderTeamCarId, state)
+        }
       })
+
+      // 物理權威：接收隊友輸入並合併
+      if (isAuthority.value) {
+        gameNetwork.onRemotePlayerInput((senderId, input) => {
+          const senderAssignment = gameStore.controlAssignments.find(a => a.playerId === senderId)
+          if (senderAssignment?.teamId === myTeamId.value) {
+            gameLoop.setTeammateInput(input)
+          }
+        })
+      }
+
       gameNetwork.onCarConfirm((teamId, carId) => {
         gameStore.confirmCar(teamId, carId)
       })
@@ -418,12 +456,26 @@ const loadAndStart = async () => {
       await waitForAllTeamsConfirmed()
     }
 
-    await gameLoop.loadCarsForTeams(allPlayers, getCarFileForPlayer, getCarStatsForPlayer)
+    // 每隊只載入一輛車（以 team-N 為 ID）
+    const teamCarObjects = [
+      ...new Map(
+        gameStore.controlAssignments.map(a => [a.teamId, { id: `team-${a.teamId}` }])
+      ).values()
+    ]
+    await gameLoop.loadCarsForTeams(teamCarObjects, getCarFileForTeam, getCarStatsForTeam)
 
     if (isMultiplayer) {
-      gameLoop.setNetworkSend((car) => {
-        gameNetwork.sendCarState(car)
-      })
+      if (isAuthority.value) {
+        // 物理權威：發送車輛狀態給所有人
+        gameLoop.setNetworkSend((car) => {
+          gameNetwork.sendCarState(car)
+        })
+      } else {
+        // 非物理權威：發送輸入給隊友（物理在隊友端執行）
+        gameLoop.setNetworkInputSend((input) => {
+          gameNetwork.sendPlayerInput(input)
+        })
+      }
     }
 
     gameStore.setCarLoaded()

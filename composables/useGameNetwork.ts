@@ -18,6 +18,17 @@ type RemoteCarStateCallback = (
   },
 ) => void;
 
+type PlayerInputPayload = {
+  accelerate: boolean;
+  brake: boolean;
+  turnLeft: boolean;
+  turnRight: boolean;
+};
+type PlayerInputCallback = (
+  playerId: string,
+  input: PlayerInputPayload,
+) => void;
+
 type GameAction = "play_again" | "back_to_room";
 type GameActionCallback = (action: GameAction) => void;
 
@@ -36,12 +47,14 @@ function getWsUrl(): string {
 export function useGameNetwork() {
   let signalingClient: SignalingClient | null = null;
   let remoteCarStateCallback: RemoteCarStateCallback | null = null;
+  let playerInputCallback: PlayerInputCallback | null = null;
   let gameActionCallback: GameActionCallback | null = null;
   let carConfirmCallback: CarConfirmCallback | null = null;
   let playerDisconnectCallback: PlayerDisconnectCallback | null = null;
   let currentPlayerId = "";
   let currentRoomId = "";
   let lastSendTime = 0;
+  let lastInputSendTime = 0;
   const SEND_INTERVAL_MS = 50; // 20Hz
 
   /**
@@ -82,6 +95,9 @@ export function useGameNetwork() {
     } else if (signal.type === "game_action") {
       const { action } = signal.payload as { action: GameAction };
       gameActionCallback?.(action);
+    } else if (signal.type === "player_input") {
+      const input = signal.payload as PlayerInputPayload;
+      playerInputCallback?.(signal.senderId, input);
     } else if (signal.type === "car_confirm") {
       const { teamId, carId } = signal.payload as {
         teamId: number;
@@ -131,6 +147,30 @@ export function useGameNetwork() {
    */
   const onRemoteCarState = (cb: RemoteCarStateCallback): void => {
     remoteCarStateCallback = cb;
+  };
+
+  /**
+   * 發送玩家輸入狀態（非物理權威玩家呼叫，供隊友合併使用）
+   */
+  const sendPlayerInput = (input: PlayerInputPayload): void => {
+    if (!signalingClient?.isConnected()) return;
+    const now = performance.now();
+    if (now - lastInputSendTime < SEND_INTERVAL_MS) return;
+    lastInputSendTime = now;
+
+    signalingClient.sendSignal({
+      type: "player_input",
+      roomId: currentRoomId,
+      targetId: "",
+      payload: input,
+    });
+  };
+
+  /**
+   * 註冊收到遠端玩家輸入的 callback
+   */
+  const onRemotePlayerInput = (cb: PlayerInputCallback): void => {
+    playerInputCallback = cb;
   };
 
   /**
@@ -187,6 +227,7 @@ export function useGameNetwork() {
     signalingClient?.disconnect();
     signalingClient = null;
     remoteCarStateCallback = null;
+    playerInputCallback = null;
     gameActionCallback = null;
     carConfirmCallback = null;
     playerDisconnectCallback = null;
@@ -196,6 +237,8 @@ export function useGameNetwork() {
     connect,
     sendCarState,
     onRemoteCarState,
+    sendPlayerInput,
+    onRemotePlayerInput,
     sendGameAction,
     onGameAction,
     sendCarConfirm,

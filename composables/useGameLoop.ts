@@ -10,7 +10,12 @@ import { InputHandler } from "../utils/input-handler";
 import { RaceTrackGenerator } from "../utils/race-track-generator";
 import { TrackCollisionSystem } from "../utils/track-collision";
 import { LapTracker } from "../utils/score-calculator";
-import type { RaceCar, RaceTrack, ControlType } from "../types/game";
+import type {
+  RaceCar,
+  RaceTrack,
+  ControlType,
+  InputState,
+} from "../types/game";
 import type { CarStats } from "../app/data/car-registry";
 
 export function useGameLoop() {
@@ -38,6 +43,12 @@ export function useGameLoop() {
 
   let animationFrameId: number | null = null;
   let networkSendFn: ((car: RaceCar) => void) | null = null;
+  let networkInputSendFn: ((input: InputState) => void) | null = null;
+
+  // 是否為本隊車輛的物理權威（有 accelerate 控制的玩家）
+  const isPhysicsAuthority = ref(true);
+  // 隊友的輸入狀態（由物理權威合併使用）
+  const teammateInput = ref<Omit<InputState, "sequenceNumber"> | null>(null);
 
   /**
    * 初始化遊戲
@@ -274,8 +285,7 @@ export function useGameLoop() {
     const playerCar = cars.value.get(playerCarId.value);
     if (!playerCar) return;
 
-    // 只有在輸入未鎖定時才處理物理更新
-    const input = inputLocked.value
+    const ownInput = inputLocked.value
       ? {
           accelerate: false,
           brake: false,
@@ -285,50 +295,71 @@ export function useGameLoop() {
         }
       : inputHandler.getCurrentInputState();
 
-    physics.update(
-      deltaTime,
-      playerCar,
-      input,
-      track.value.obstacles,
-      track.value.playableBounds,
-    );
+    if (isPhysicsAuthority.value) {
+      // 合併隊友輸入（若有）
+      const mergedInput: InputState = teammateInput.value
+        ? {
+            accelerate: ownInput.accelerate || teammateInput.value.accelerate,
+            brake: ownInput.brake || teammateInput.value.brake,
+            turnLeft: ownInput.turnLeft || teammateInput.value.turnLeft,
+            turnRight: ownInput.turnRight || teammateInput.value.turnRight,
+            sequenceNumber: ownInput.sequenceNumber,
+          }
+        : ownInput;
 
-    // 賽道圍牆碰撞偵測（使用 raceTrack.glb 的 Mesh006_1）
-    trackCollision?.applyWallCollision(playerCar);
+      physics.update(
+        deltaTime,
+        playerCar,
+        mergedInput,
+        track.value.obstacles,
+        track.value.playableBounds,
+      );
 
-    // 車輛間碰撞偵測（本地玩家 vs 所有遠端車輛）
-    cars.value.forEach((remoteCar, remoteId) => {
-      if (
-        remoteId !== playerCarId.value &&
-        physics!.checkCarCollision(playerCar, remoteCar)
-      ) {
-        physics!.resolveCarCollision(playerCar, remoteCar);
+      // 賽道圍牆碰撞偵測
+      trackCollision?.applyWallCollision(playerCar);
+
+      // 車輛間碰撞偵測
+      cars.value.forEach((remoteCar, remoteId) => {
+        if (
+          remoteId !== playerCarId.value &&
+          physics!.checkCarCollision(playerCar, remoteCar)
+        ) {
+          physics!.resolveCarCollision(playerCar, remoteCar);
+        }
+      });
+
+      // 更新圈數追蹤
+      lapTracker?.update(playerCar.position.x, playerCar.position.z);
+      laps.value = lapTracker?.getLaps() ?? 0;
+      lapProgress.value = lapTracker?.getLapProgress() ?? 0;
+      score.value = lapTracker?.getScore() ?? 0;
+      playerCar.currentScore = score.value;
+
+      // 檢查加速帶碰撞
+      const boost = physics.checkSpeedBoostCollision(
+        playerCar,
+        track.value.speedBoosts,
+      );
+      if (boost && boost.active) {
+        physics.applySpeedBoost(playerCar);
+        boost.active = false;
+        setTimeout(() => {
+          boost.active = true;
+        }, 3000);
       }
-    });
 
-    // 更新圈數追蹤
-    lapTracker?.update(playerCar.position.x, playerCar.position.z);
-    laps.value = lapTracker?.getLaps() ?? 0;
-    lapProgress.value = lapTracker?.getLapProgress() ?? 0;
-    score.value = lapTracker?.getScore() ?? 0;
-    // 將 LapTracker 的分數同步回 car，讓其他玩家可以接收到
-    playerCar.currentScore = score.value;
+      // 發送車輛狀態到網路
+      networkSendFn?.(playerCar);
+    } else {
+      // 非物理權威：發送輸入給隊友（隊友合併後執行物理）
+      networkInputSendFn?.(ownInput);
 
-    // 檢查加速帶碰撞
-    const boost = physics.checkSpeedBoostCollision(
-      playerCar,
-      track.value.speedBoosts,
-    );
-    if (boost && boost.active) {
-      physics.applySpeedBoost(playerCar);
-      boost.active = false; // 暫時停用加速帶
-      setTimeout(() => {
-        boost.active = true; // 3 秒後重新啟用
-      }, 3000);
+      // 根據從網路接收到的車輛位置更新圈數追蹤
+      lapTracker?.update(playerCar.position.x, playerCar.position.z);
+      laps.value = lapTracker?.getLaps() ?? 0;
+      lapProgress.value = lapTracker?.getLapProgress() ?? 0;
+      score.value = lapTracker?.getScore() ?? 0;
     }
-
-    // 發送車輛狀態到網路
-    networkSendFn?.(playerCar);
   };
 
   /**
@@ -430,6 +461,31 @@ export function useGameLoop() {
   };
 
   /**
+   * 設定網路輸入發送 callback（非物理權威玩家使用）
+   */
+  const setNetworkInputSend = (
+    fn: ((input: InputState) => void) | null,
+  ): void => {
+    networkInputSendFn = fn;
+  };
+
+  /**
+   * 設定是否為本隊物理權威
+   */
+  const setPhysicsAuthority = (auth: boolean): void => {
+    isPhysicsAuthority.value = auth;
+  };
+
+  /**
+   * 設定隊友的輸入狀態（由物理權威接收後合併使用）
+   */
+  const setTeammateInput = (
+    input: Omit<InputState, "sequenceNumber">,
+  ): void => {
+    teammateInput.value = input;
+  };
+
+  /**
    * 虛擬按鈕觸發輸入（行動裝置用）
    */
   const pressControl = (type: ControlType, pressed: boolean): void => {
@@ -476,6 +532,9 @@ export function useGameLoop() {
     addCar,
     updateCarState,
     setNetworkSend,
+    setNetworkInputSend,
+    setPhysicsAuthority,
+    setTeammateInput,
     pressControl,
     setCarColor,
     dispose,
