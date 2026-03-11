@@ -421,7 +421,7 @@ const loadAndStart = async () => {
         gameNetwork.onRemotePlayerInput((senderId, input) => {
           const senderAssignment = gameStore.controlAssignments.find(a => a.playerId === senderId)
           if (senderAssignment?.teamId === myTeamId.value) {
-            gameLoop.setTeammateInput(input)
+            gameLoop.setTeammateInput(senderId, input)
           }
         })
       }

@@ -47,8 +47,10 @@ export function useGameLoop() {
 
   // 是否為本隊車輛的物理權威（有 accelerate 控制的玩家）
   const isPhysicsAuthority = ref(true);
-  // 隊友的輸入狀態（由物理權威合併使用）
-  const teammateInput = ref<Omit<InputState, "sequenceNumber"> | null>(null);
+  // 所有隊友的輸入狀態（key = playerId），由物理權威合併使用
+  const teammateInputs = ref<Map<string, Omit<InputState, "sequenceNumber">>>(
+    new Map(),
+  );
 
   /**
    * 初始化遊戲
@@ -296,16 +298,14 @@ export function useGameLoop() {
       : inputHandler.getCurrentInputState();
 
     if (isPhysicsAuthority.value) {
-      // 合併隊友輸入（若有）
-      const mergedInput: InputState = teammateInput.value
-        ? {
-            accelerate: ownInput.accelerate || teammateInput.value.accelerate,
-            brake: ownInput.brake || teammateInput.value.brake,
-            turnLeft: ownInput.turnLeft || teammateInput.value.turnLeft,
-            turnRight: ownInput.turnRight || teammateInput.value.turnRight,
-            sequenceNumber: ownInput.sequenceNumber,
-          }
-        : ownInput;
+      // 合併所有隊友輸入（支援多人共控，如 6 人每隊 3 人）
+      const mergedInput: InputState = { ...ownInput };
+      teammateInputs.value.forEach((input) => {
+        mergedInput.accelerate = mergedInput.accelerate || input.accelerate;
+        mergedInput.brake = mergedInput.brake || input.brake;
+        mergedInput.turnLeft = mergedInput.turnLeft || input.turnLeft;
+        mergedInput.turnRight = mergedInput.turnRight || input.turnRight;
+      });
 
       physics.update(
         deltaTime,
@@ -477,12 +477,16 @@ export function useGameLoop() {
   };
 
   /**
-   * 設定隊友的輸入狀態（由物理權威接收後合併使用）
+   * 更新指定隊友的輸入狀態（由物理權威接收後合併使用）
+   * @param playerId 發送輸入的隊友 playerId
    */
   const setTeammateInput = (
+    playerId: string,
     input: Omit<InputState, "sequenceNumber">,
   ): void => {
-    teammateInput.value = input;
+    const next = new Map(teammateInputs.value);
+    next.set(playerId, input);
+    teammateInputs.value = next;
   };
 
   /**
@@ -516,6 +520,7 @@ export function useGameLoop() {
     }
 
     cars.value.clear();
+    teammateInputs.value.clear();
   };
 
   onUnmounted(() => {
