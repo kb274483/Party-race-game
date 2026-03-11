@@ -25,6 +25,8 @@ type CarConfirmCallback = (teamId: number, carId: string) => void;
 type PlayerDisconnectCallback = (playerId: string) => void;
 
 function getWsUrl(): string {
+  const url = import.meta.env.NUXT_PUBLIC_WS_URL as string | undefined;
+  if (url) return url;
   if (typeof window === "undefined") return "ws://localhost:8080/ws";
   const host = window.location.hostname;
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";

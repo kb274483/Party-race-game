@@ -8,9 +8,12 @@ import type { RoomInfo } from "../types/room";
 import type { PlayerInfo } from "../types/game";
 
 function getApiBase(): string {
+  const url = import.meta.env.NUXT_PUBLIC_API_URL as string | undefined;
+  if (url) return url;
   if (typeof window === "undefined") return "http://localhost:8080";
   const host = window.location.hostname;
-  return `http://${host}:8080`;
+  const protocol = window.location.protocol;
+  return `${protocol}//${host}:8080`;
 }
 
 /** 後端 API 回傳的房間格式（players 為 object） */

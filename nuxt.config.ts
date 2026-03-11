@@ -37,4 +37,22 @@ export default defineNuxtConfig({
   },
 
   ssr: false, // 遊戲需要客戶端渲染
+
+  vite: {
+    define: {
+      "import.meta.env.NUXT_PUBLIC_API_URL": JSON.stringify(
+        process.env.NUXT_PUBLIC_API_URL ?? "",
+      ),
+      "import.meta.env.NUXT_PUBLIC_WS_URL": JSON.stringify(
+        process.env.NUXT_PUBLIC_WS_URL ?? "",
+      ),
+    },
+  },
+
+  runtimeConfig: {
+    public: {
+      apiUrl: process.env.NUXT_PUBLIC_API_URL ?? "",
+      wsUrl: process.env.NUXT_PUBLIC_WS_URL ?? "",
+    },
+  },
 });

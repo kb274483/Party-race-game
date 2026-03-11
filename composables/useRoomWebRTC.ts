@@ -8,6 +8,8 @@ import { SignalingClient } from "../utils/signaling-client";
 import type { PlayerInfo } from "../types/game";
 
 function getSignalingWsUrl(): string {
+  const url = import.meta.env.NUXT_PUBLIC_WS_URL as string | undefined;
+  if (url) return url;
   if (typeof window === "undefined") return "ws://localhost:8080/ws";
   const host = window.location.hostname;
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
