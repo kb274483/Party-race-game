@@ -6,7 +6,12 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { RaceCar, Obstacle, SpeedBoost, BoundingBox } from "../../types/game";
+import type {
+  RaceCar,
+  Obstacle,
+  SpeedBoost,
+  BoundingBox,
+} from "../../types/game";
 import { TrackLoader } from "./track-loader";
 import { CarModelManager } from "./car-model-manager";
 import { ExplosionEffect } from "./explosion-effect";
@@ -30,21 +35,28 @@ export class GameRenderer {
   private cameraLookAtOffset = new THREE.Vector3(0, 1, 15);
   private cameraSmoothness = 0.15;
 
+  private container: HTMLElement | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  // 儲存 bound 參考以正確移除 listener
+  private boundWindowResize: (() => void) | null = null;
+
   constructor() {
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000,
-    );
+    // 初始 aspect 先用 1，initialize() 時會依容器尺寸修正
+    this.camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.loader = new GLTFLoader();
   }
 
   initialize(container: HTMLElement): void {
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.container = container;
+    const w = container.clientWidth || window.innerWidth;
+    const h = container.clientHeight || window.innerHeight;
+
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
@@ -80,7 +92,13 @@ export class GameRenderer {
     this.speedEffect = new SpeedEffect();
     this.speedEffect.init(container);
 
-    window.addEventListener("resize", this.onWindowResize.bind(this));
+    // ResizeObserver：容器尺寸改變（含裝置旋轉）時立即 resize
+    this.resizeObserver = new ResizeObserver(() => this.onContainerResize());
+    this.resizeObserver.observe(container);
+
+    // window resize 作為 fallback（舊版瀏覽器）
+    this.boundWindowResize = this.onWindowResize.bind(this);
+    window.addEventListener("resize", this.boundWindowResize);
   }
 
   // ── Track ──────────────────────────────────────────────────────
@@ -164,9 +182,14 @@ export class GameRenderer {
     );
 
     const offset = this.cameraOffset.clone().applyQuaternion(carQuaternion);
-    this.camera.position.lerp(carPosition.clone().add(offset), this.cameraSmoothness);
+    this.camera.position.lerp(
+      carPosition.clone().add(offset),
+      this.cameraSmoothness,
+    );
 
-    const lookAt = this.cameraLookAtOffset.clone().applyQuaternion(carQuaternion);
+    const lookAt = this.cameraLookAtOffset
+      .clone()
+      .applyQuaternion(carQuaternion);
     this.camera.lookAt(carPosition.clone().add(lookAt));
   }
 
@@ -179,15 +202,31 @@ export class GameRenderer {
 
   // ── Lifecycle ──────────────────────────────────────────────────
 
-  private onWindowResize(): void {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
+  private onContainerResize(): void {
+    if (!this.container) return;
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(w, h);
     this.speedEffect.resize();
   }
 
+  private onWindowResize(): void {
+    // ResizeObserver 存在時由 onContainerResize 處理，此處僅作 fallback
+    if (!this.resizeObserver) {
+      this.onContainerResize();
+    }
+  }
+
   dispose(): void {
-    window.removeEventListener("resize", this.onWindowResize.bind(this));
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    if (this.boundWindowResize) {
+      window.removeEventListener("resize", this.boundWindowResize);
+      this.boundWindowResize = null;
+    }
     this.renderer.dispose();
     this.trackLoader.dispose();
     this.carManager.dispose();

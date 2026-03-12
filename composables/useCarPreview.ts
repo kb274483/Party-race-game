@@ -17,12 +17,24 @@ export function useCarPreview() {
   let renderer: THREE.WebGLRenderer | null = null;
   let currentModel: THREE.Group | null = null;
   let animFrameId: number | null = null;
+  let resizeObserver: ResizeObserver | null = null;
   const loader = new GLTFLoader();
+
+  /** 依照 canvas 的實際 CSS 尺寸更新 renderer 與 camera */
+  const syncSize = (canvas: HTMLCanvasElement) => {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!renderer || !camera || w <= 0 || h <= 0) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
 
   /** 初始化預覽場景，掛載到指定 canvas */
   const initialize = (canvas: HTMLCanvasElement) => {
-    const w = canvas.clientWidth || canvas.width;
-    const h = canvas.clientHeight || canvas.height;
+    // 等一幀讓瀏覽器完成 layout，再讀取真實尺寸
+    const w = canvas.clientWidth || 400;
+    const h = canvas.clientHeight || 220;
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf5f5f0); // 米白，與 neo-brutalism 一致
@@ -34,6 +46,10 @@ export function useCarPreview() {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setSize(w, h, false); // false = 不設定 CSS 尺寸
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    // 監聽 canvas 尺寸變化（裝置旋轉、視窗縮放）
+    resizeObserver = new ResizeObserver(() => syncSize(canvas));
+    resizeObserver.observe(canvas);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -116,7 +132,10 @@ export function useCarPreview() {
 
           modelCache.set(file, model);
 
-          if (!scene) { resolve(); return; }
+          if (!scene) {
+            resolve();
+            return;
+          }
           currentModel = model.clone();
           scene.add(currentModel);
           resolve();
@@ -145,6 +164,8 @@ export function useCarPreview() {
       cancelAnimationFrame(animFrameId);
       animFrameId = null;
     }
+    resizeObserver?.disconnect();
+    resizeObserver = null;
     renderer?.dispose();
     renderer = null;
     scene = null;

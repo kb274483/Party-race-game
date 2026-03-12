@@ -16,7 +16,7 @@
         @mouseup.prevent="release(ControlType.TURN_LEFT)"
         @mouseleave="release(ControlType.TURN_LEFT)"
       >
-        ◀
+        <span class="arrow arrow-left" />
       </button>
       <!-- 右轉 -->
       <button
@@ -29,7 +29,7 @@
         @mouseup.prevent="release(ControlType.TURN_RIGHT)"
         @mouseleave="release(ControlType.TURN_RIGHT)"
       >
-        ▶
+        <span class="arrow arrow-right" />
       </button>
     </div>
 
@@ -92,23 +92,24 @@ const safeAreaStyle = computed(() => ({
 </script>
 
 <style scoped>
-/* 只在行動裝置（pointer: coarse = 觸控螢幕）橫向時顯示 */
+/* 只在行動裝置（pointer: coarse = 觸控螢幕）顯示，直向橫向均支援 */
 .virtual-controls {
   display: none;
 }
 
-@media (pointer: coarse) and (orientation: landscape) {
+@media (pointer: coarse) {
   .virtual-controls {
     display: block;
   }
 }
 
 .ctrl-btn {
+  /* 直向時用較小尺寸（64px），橫向時稍大（80px） */
   width: 80px;
   height: 80px;
   border-radius: 50%;
   border: 4px solid rgba(0, 0, 0, 0.8);
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   font-weight: 900;
   color: #fff;
   cursor: pointer;
@@ -123,6 +124,14 @@ const safeAreaStyle = computed(() => ({
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6);
 }
 
+@media (orientation: landscape) {
+  .ctrl-btn {
+    width: 80px;
+    height: 80px;
+    font-size: 1.1rem;
+  }
+}
+
 .ctrl-btn:active {
   transform: scale(0.9);
   opacity: 0.85;
@@ -133,15 +142,44 @@ const safeAreaStyle = computed(() => ({
   background: rgba(59, 130, 246, 0.75); /* blue */
 }
 
+/* CSS 三角形箭頭，完全避免 iOS emoji 替換問題 */
+.arrow {
+  display: block;
+  width: 0;
+  height: 0;
+}
+
+.arrow-left {
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-right: 16px solid rgba(255, 255, 255, 0.95);
+  margin-right: 3px; /* 視覺置中補正 */
+}
+
+.arrow-right {
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 16px solid rgba(255, 255, 255, 0.95);
+  margin-left: 3px;
+}
+
 .ctrl-accelerate {
   background: rgba(34, 197, 94, 0.85); /* green */
-  width: 96px;
-  height: 96px;
-  font-size: 0.95rem;
+  width: 76px;
+  height: 76px;
+  font-size: 0.85rem;
+}
+
+@media (orientation: landscape) {
+  .ctrl-accelerate {
+    width: 96px;
+    height: 96px;
+    font-size: 0.95rem;
+  }
 }
 
 .ctrl-brake {
   background: rgba(239, 68, 68, 0.75); /* red */
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 </style>

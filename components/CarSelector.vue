@@ -1,11 +1,12 @@
 <template>
-  <div class="absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-auto overflow-y-auto py-8 z-20">
-    <div class="neo-card p-8 w-full max-w-lg mx-4" :class="isSelector ? '-rotate-1' : 'rotate-1'">
+  <div class="absolute inset-0 bg-black/80 pointer-events-auto overflow-y-auto z-20">
+    <div class="min-h-full flex items-center justify-center py-4 px-3">
+    <div class="neo-card p-4 sm:p-8 w-full max-w-sm sm:max-w-lg" :class="isSelector ? '-rotate-1' : 'rotate-1'">
       <!-- 標題 -->
-      <h2 class="font-black text-2xl uppercase tracking-widest mb-2 text-center">
+      <h2 class="font-black text-xl sm:text-2xl uppercase tracking-widest mb-1 sm:mb-2 text-center">
         選擇車輛
       </h2>
-      <p class="text-center font-bold text-black/60 mb-6 text-sm uppercase tracking-wider">
+      <p class="text-center font-bold text-black/60 mb-3 sm:mb-6 text-sm uppercase tracking-wider">
         隊伍 {{ teamId }} ─
         <span :class="isSelector ? 'text-black' : 'text-black/50'">
           {{ isSelector ? '輪到你選車' : '等待隊友選車...' }}
@@ -39,12 +40,10 @@
           </div>
 
           <!-- 3D 預覽 canvas -->
-          <div class="relative w-full" style="height: 220px;">
+          <div class="relative w-full" style="aspect-ratio: 400/220;">
             <canvas
               ref="previewCanvas"
-              class="w-full h-full block"
-              width="400"
-              height="220"
+              class="absolute inset-0 w-full h-full block"
             />
             <!-- 載入中遮罩 -->
             <div
@@ -73,7 +72,7 @@
       </div>
 
       <!-- 性能條 -->
-      <div v-if="currentCar" class="flex flex-col gap-2 mb-4 px-1">
+      <div v-if="currentCar" class="flex flex-col gap-1 sm:gap-2 mb-3 sm:mb-4 px-1">
         <div
           v-for="stat in statBars"
           :key="stat.label"
@@ -91,7 +90,7 @@
       </div>
 
       <!-- 進度點 -->
-      <div class="flex justify-center gap-2 mb-6 flex-wrap">
+      <div class="flex justify-center gap-2 mb-3 sm:mb-6 flex-wrap">
         <button
           v-for="(_, i) in cars"
           :key="i"
@@ -136,6 +135,7 @@
         </div>
       </div>
     </div>
+    </div><!-- end centering wrapper -->
   </div>
 </template>
 

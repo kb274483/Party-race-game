@@ -1,5 +1,5 @@
 <template>
-  <div class="game-container w-full h-screen overflow-hidden bg-black relative">
+  <div class="game-container fixed inset-0 overflow-hidden bg-black">
     <!-- 3D 遊戲畫布 -->
     <div ref="canvasContainer" class="w-full h-full"></div>
 
@@ -11,8 +11,7 @@
       @release="gameLoop.pressControl($event, false)"
     />
 
-    <!-- 直式模式：請旋轉裝置提示 -->
-    <GameRotatePrompt v-if="isMobilePortrait" />
+    <!-- 直式模式提示已移除：行動裝置支援直向遊玩 -->
 
     <!-- 選車畫面 -->
     <CarSelector
@@ -109,9 +108,23 @@ const isTouchDevice = typeof window !== 'undefined'
 
 const isMobilePortrait = computed(() => isTouchDevice && isPortrait.value)
 
+// 使用 visualViewport（行動裝置更即時）或 fallback 到 window
 const updateOrientation = () => {
-  isPortrait.value = window.innerHeight > window.innerWidth
+  const vv = window.visualViewport
+  const w = vv ? vv.width : window.innerWidth
+  const h = vv ? vv.height : window.innerHeight
+  isPortrait.value = h > w
 }
+
+// orientationchange 會在 viewport 尺寸更新前觸發，稍等一幀再讀取
+const onOrientationChange = () => {
+  requestAnimationFrame(() => {
+    setTimeout(updateOrientation, 50)
+  })
+}
+
+// 防止下拉重整（passive:false 才能 preventDefault）
+let preventScrollFn: ((e: TouchEvent) => void) | null = null
 
 const tryLockLandscape = async () => {
   await document.documentElement.requestFullscreen?.().catch(() => {})
@@ -434,6 +447,9 @@ const loadAndStart = async () => {
         else if (action === 'back_to_room') doBackToRoom()
       })
       gameNetwork.onPlayerDisconnect((playerId) => {
+        // 選車與載入階段忽略斷線通知：
+        // 此時玩家正從房間頁切換到遊戲頁，舊連線關閉是正常過渡，並非真正離線
+        if (gameStore.phase === GamePhase.WAITING || gameStore.isCarSelection) return
         const player = gameStore.gamePlayers.find(p => p.id === playerId)
         const name = player?.name ?? playerId
         disconnectedPlayerNames.value = [...disconnectedPlayerNames.value, name]
@@ -498,9 +514,17 @@ onMounted(async () => {
   }
 
   updateOrientation()
+  window.visualViewport?.addEventListener('resize', updateOrientation)
   window.addEventListener('resize', updateOrientation)
-  window.addEventListener('orientationchange', updateOrientation)
-  if (isTouchDevice) tryLockLandscape()
+  window.addEventListener('orientationchange', onOrientationChange)
+  if (isTouchDevice) {
+    // 不強制鎖定橫向，讓玩家用直向也能遊玩
+    // 禁止下拉重整
+    preventScrollFn = (e: TouchEvent) => e.preventDefault()
+    document.addEventListener('touchmove', preventScrollFn, { passive: false })
+    // 禁止 overscroll
+    document.body.style.overscrollBehavior = 'none'
+  }
 
   if (gameStore.phase === GamePhase.WAITING && !gameStore.isLoaded) {
     await loadAndStart()
@@ -512,8 +536,14 @@ onBeforeUnmount(() => {
   gameLoop.setNetworkSend(null)
   gameNetwork.disconnect()
   gameLoop.dispose()
+  window.visualViewport?.removeEventListener('resize', updateOrientation)
   window.removeEventListener('resize', updateOrientation)
-  window.removeEventListener('orientationchange', updateOrientation)
+  window.removeEventListener('orientationchange', onOrientationChange)
+  if (preventScrollFn) {
+    document.removeEventListener('touchmove', preventScrollFn)
+    preventScrollFn = null
+  }
+  document.body.style.overscrollBehavior = ''
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {})
   }
@@ -522,6 +552,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .game-container {
-  position: relative;
+  /* fixed inset-0 透過 Tailwind class 設定，此處補強 touch 行為 */
+  touch-action: none;
+  -webkit-overflow-scrolling: touch;
 }
 </style>

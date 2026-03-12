@@ -18,6 +18,62 @@ import type {
 } from "../types/game";
 import type { CarStats } from "../app/data/car-registry";
 
+// ── 輔助函式 ──────────────────────────────────────────────────────
+
+/** 從四元數取得前進向量（與 PhysicsEngine.getForwardVector 一致） */
+function getForwardVector(q: { x: number; y: number; z: number; w: number }) {
+  return {
+    x: 2 * (q.x * q.z + q.w * q.y),
+    y: 2 * (q.y * q.z - q.w * q.x),
+    z: 1 - 2 * (q.x * q.x + q.y * q.y),
+  };
+}
+
+/** 四元數球面插值（SLERP），t 為 [0,1] */
+function quatSlerp(
+  a: { x: number; y: number; z: number; w: number },
+  b: { x: number; y: number; z: number; w: number },
+  t: number,
+) {
+  let dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+  // 確保最短路徑
+  const bx = dot < 0 ? -b.x : b.x;
+  const by = dot < 0 ? -b.y : b.y;
+  const bz = dot < 0 ? -b.z : b.z;
+  const bw = dot < 0 ? -b.w : b.w;
+  dot = Math.abs(dot);
+
+  if (dot > 0.9995) {
+    // 幾乎相同，用線性插值避免除以零
+    return {
+      x: a.x + (bx - a.x) * t,
+      y: a.y + (by - a.y) * t,
+      z: a.z + (bz - a.z) * t,
+      w: a.w + (bw - a.w) * t,
+    };
+  }
+  const theta = Math.acos(dot);
+  const sinTheta = Math.sin(theta);
+  const wa = Math.sin((1 - t) * theta) / sinTheta;
+  const wb = Math.sin(t * theta) / sinTheta;
+  return {
+    x: a.x * wa + bx * wb,
+    y: a.y * wa + by * wb,
+    z: a.z * wa + bz * wb,
+    w: a.w * wa + bw * wb,
+  };
+}
+
+/** 遠端車輛快照（用於 dead reckoning） */
+type RemoteSnapshot = {
+  position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number; w: number };
+  speed: number;
+  timestamp: number;
+};
+
+// ──────────────────────────────────────────────────────────────────
+
 export function useGameLoop() {
   let renderer: GameRenderer | null = null;
   let physics: PhysicsEngine | null = null;
@@ -44,6 +100,9 @@ export function useGameLoop() {
   let animationFrameId: number | null = null;
   let networkSendFn: ((car: RaceCar) => void) | null = null;
   let networkInputSendFn: ((input: InputState) => void) | null = null;
+
+  /** 遠端車輛最新快照，用於 dead reckoning */
+  const remoteSnapshots = new Map<string, RemoteSnapshot>();
 
   // 是否為本隊車輛的物理權威（有 accelerate 控制的玩家）
   const isPhysicsAuthority = ref(true);
@@ -279,6 +338,45 @@ export function useGameLoop() {
   };
 
   /**
+   * Dead reckoning：對所有非本地物理控制的車輛進行位置外推 + 平滑插值
+   * 讓遠端車輛在兩次網路更新之間繼續平滑移動，而非原地等待
+   */
+  const applyDeadReckoning = (deltaTime: number, excludeCarId: string) => {
+    const now = performance.now();
+    // 使用 delta-time 基礎的 lerp，與 framerate 無關
+    // k=8 代表約 125ms 收斂到目標位置
+    const posLerp = 1 - Math.exp(-8 * deltaTime);
+    const rotLerp = 1 - Math.exp(-12 * deltaTime);
+
+    cars.value.forEach((car, carId) => {
+      if (carId === excludeCarId) return;
+      const snap = remoteSnapshots.get(carId);
+      if (!snap) return;
+
+      // 根據上次快照的速度和方向推算預測位置
+      const age = (now - snap.timestamp) / 1000; // 秒
+      const fwd = getForwardVector(snap.rotation);
+      const predictedPos = {
+        x: snap.position.x + fwd.x * snap.speed * age,
+        y: snap.position.y,
+        z: snap.position.z + fwd.z * snap.speed * age,
+      };
+
+      // 以預測位置為目標做插值（平滑，無跳格）
+      car.position.x += (predictedPos.x - car.position.x) * posLerp;
+      car.position.y += (predictedPos.y - car.position.y) * posLerp;
+      car.position.z += (predictedPos.z - car.position.z) * posLerp;
+
+      // 旋轉使用正確的 Quaternion SLERP
+      const newRot = quatSlerp(car.rotation, snap.rotation, rotLerp);
+      car.rotation.x = newRot.x;
+      car.rotation.y = newRot.y;
+      car.rotation.z = newRot.z;
+      car.rotation.w = newRot.w;
+    });
+  };
+
+  /**
    * 更新遊戲狀態
    */
   const update = (deltaTime: number) => {
@@ -328,6 +426,9 @@ export function useGameLoop() {
         }
       });
 
+      // 對手車輛 dead reckoning（物理權威也要平滑顯示對手）
+      applyDeadReckoning(deltaTime, playerCarId.value);
+
       // 更新圈數追蹤
       lapTracker?.update(playerCar.position.x, playerCar.position.z);
       laps.value = lapTracker?.getLaps() ?? 0;
@@ -353,6 +454,9 @@ export function useGameLoop() {
     } else {
       // 非物理權威：發送輸入給隊友（隊友合併後執行物理）
       networkInputSendFn?.(ownInput);
+
+      // 本玩家車輛與所有遠端車輛都套用 dead reckoning
+      applyDeadReckoning(deltaTime, "");
 
       // 根據從網路接收到的車輛位置更新圈數追蹤
       lapTracker?.update(playerCar.position.x, playerCar.position.z);
@@ -424,33 +528,25 @@ export function useGameLoop() {
 
   /**
    * 更新其他車輛狀態（來自網路同步）
+   * 改為儲存快照，實際插值在 update() 的 dead reckoning 步驟中完成
    */
   const updateCarState = (carId: string, carState: Partial<RaceCar>) => {
     const car = cars.value.get(carId);
     if (!car) return;
 
-    // 使用插值平滑更新位置和旋轉
-    if (carState.position) {
-      car.position.x += (carState.position.x - car.position.x) * 0.3;
-      car.position.y += (carState.position.y - car.position.y) * 0.3;
-      car.position.z += (carState.position.z - car.position.z) * 0.3;
+    // 儲存帶時間戳的快照供 dead reckoning 使用
+    if (carState.position && carState.rotation) {
+      remoteSnapshots.set(carId, {
+        position: { ...carState.position },
+        rotation: { ...carState.rotation },
+        speed: carState.speed ?? car.speed,
+        timestamp: performance.now(),
+      });
     }
 
-    if (carState.rotation) {
-      // Slerp 插值旋轉（簡化版）
-      car.rotation.x += (carState.rotation.x - car.rotation.x) * 0.3;
-      car.rotation.y += (carState.rotation.y - car.rotation.y) * 0.3;
-      car.rotation.z += (carState.rotation.z - car.rotation.z) * 0.3;
-      car.rotation.w += (carState.rotation.w - car.rotation.w) * 0.3;
-    }
-
-    if (carState.speed !== undefined) {
-      car.speed = carState.speed;
-    }
-
-    if (carState.currentScore !== undefined) {
+    if (carState.speed !== undefined) car.speed = carState.speed;
+    if (carState.currentScore !== undefined)
       car.currentScore = carState.currentScore;
-    }
   };
 
   /**
@@ -521,6 +617,7 @@ export function useGameLoop() {
 
     cars.value.clear();
     teammateInputs.value.clear();
+    remoteSnapshots.clear();
   };
 
   onUnmounted(() => {

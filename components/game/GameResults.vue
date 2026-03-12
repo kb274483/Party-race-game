@@ -1,6 +1,6 @@
 <template>
   <div class="absolute inset-0 bg-black/75 pointer-events-auto overflow-y-auto">
-    <div class="min-h-full flex items-center justify-center p-3">
+    <div class="min-h-full flex items-start justify-center p-3 pt-6">
       <div class="neo-card p-4 sm:p-8 -rotate-1 w-full max-w-md">
         <h2 class="font-black text-xl sm:text-2xl uppercase tracking-widest mb-4 text-center">
           比賽結束
