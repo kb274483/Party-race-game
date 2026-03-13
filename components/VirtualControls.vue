@@ -67,7 +67,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ControlType } from '~~/types/game'
+import { ControlType } from '../types/game'
 
 const props = defineProps<{
   controls: ControlType[]

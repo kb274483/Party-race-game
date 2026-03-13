@@ -77,6 +77,7 @@ import { useGameStore } from "~~/stores/game"
 import { useRoomStore } from "~~/stores/room"
 import { useGameLoop } from "~~/composables/useGameLoop"
 import { useGameNetwork } from "~~/composables/useGameNetwork"
+import { useWakeLock } from "~~/composables/useWakeLock"
 import { GamePhase, ControlType } from "~~/types/game"
 import { CAR_REGISTRY, DEFAULT_CAR_STATS } from "~~/app/data/car-registry"
 import type { CarStats } from "~~/app/data/car-registry"
@@ -93,6 +94,8 @@ const gameNetwork = useGameNetwork()
 
 const roomId = computed(() => route.params.roomId as string)
 const isDev = import.meta.env?.DEV ?? false
+
+useWakeLock()
 
 const canvasContainer = ref<HTMLDivElement | null>(null)
 const playerControls = ref<ControlType[]>([])
@@ -184,10 +187,17 @@ function controlLabel(controls: string[]): string {
     turn_left: '左轉',
     turn_right: '右轉',
   }
+  const hasLeft = controls.includes('turn_left')
+  const hasRight = controls.includes('turn_right')
   const unique = new Set<string>()
   for (const c of controls) {
-    if (c === 'turn_left' || c === 'turn_right') unique.add('轉向')
-    else unique.add(labels[c] ?? c)
+    if (c === 'turn_left' || c === 'turn_right') {
+      // 左右都有 → 顯示「轉向」；只有其中一個 → 顯示「左轉」或「右轉」
+      if (hasLeft && hasRight) unique.add('轉向')
+      else unique.add(labels[c] ?? c)
+    } else {
+      unique.add(labels[c] ?? c)
+    }
   }
   return [...unique].join('/')
 }

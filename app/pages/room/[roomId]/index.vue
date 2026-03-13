@@ -101,11 +101,14 @@ import { ref } from 'vue'
 import { useRoomStore } from "~~/stores/room"
 import { useGameStore } from "~~/stores/game"
 import { useRoomWebRTC } from "~~/composables/useRoomWebRTC"
+import { useWakeLock } from "~~/composables/useWakeLock"
 
 const route = useRoute()
 const router = useRouter()
 const roomStore = useRoomStore()
 const { initialize, cleanup, broadcastGameStarted } = useRoomWebRTC()
+
+useWakeLock()
 
 const copied = ref(false)
 const copyRoomId = async () => {

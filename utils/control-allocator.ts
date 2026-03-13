@@ -125,23 +125,25 @@ export class ControlAllocator {
 
   /**
    * 5 人模式：隊伍 1 有 3 人，隊伍 2 有 2 人
+   * 隊伍 1：油門/煞車一人、左轉一人、右轉一人
+   * 隊伍 2：油門/煞車一人、轉向一人
    */
   private allocate5Players(playerIds: string[]): ControlAssignment[] {
     return [
       {
         playerId: playerIds[0]!,
         teamId: 1,
-        controls: ["brake" as ControlType],
+        controls: ["accelerate" as ControlType, "brake" as ControlType],
       },
       {
         playerId: playerIds[1]!,
         teamId: 1,
-        controls: ["accelerate" as ControlType],
+        controls: ["turn_left" as ControlType],
       },
       {
         playerId: playerIds[2]!,
         teamId: 1,
-        controls: ["turn_left" as ControlType, "turn_right" as ControlType],
+        controls: ["turn_right" as ControlType],
       },
       {
         playerId: playerIds[3]!,
@@ -158,39 +160,39 @@ export class ControlAllocator {
 
   /**
    * 6 人模式：2 隊，每隊 3 人
-   * 一人控制煞車，一人控制油門，一人控制方向
+   * 油門/煞車一人、左轉一人、右轉一人
    */
   private allocate6Players(playerIds: string[]): ControlAssignment[] {
     return [
       {
         playerId: playerIds[0]!,
         teamId: 1,
-        controls: ["brake" as ControlType],
+        controls: ["accelerate" as ControlType, "brake" as ControlType],
       },
       {
         playerId: playerIds[1]!,
         teamId: 1,
-        controls: ["accelerate" as ControlType],
+        controls: ["turn_left" as ControlType],
       },
       {
         playerId: playerIds[2]!,
         teamId: 1,
-        controls: ["turn_left" as ControlType, "turn_right" as ControlType],
+        controls: ["turn_right" as ControlType],
       },
       {
         playerId: playerIds[3]!,
         teamId: 2,
-        controls: ["brake" as ControlType],
+        controls: ["accelerate" as ControlType, "brake" as ControlType],
       },
       {
         playerId: playerIds[4]!,
         teamId: 2,
-        controls: ["accelerate" as ControlType],
+        controls: ["turn_left" as ControlType],
       },
       {
         playerId: playerIds[5]!,
         teamId: 2,
-        controls: ["turn_left" as ControlType, "turn_right" as ControlType],
+        controls: ["turn_right" as ControlType],
       },
     ];
   }
