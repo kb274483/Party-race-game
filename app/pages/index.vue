@@ -28,9 +28,9 @@
       </header>
 
       <!-- Forms section - asymmetric 60/40 split -->
-      <div class="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12">
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 lg:gap-12">
         <!-- Create room card -->
-        <div class="lg:col-span-3 w-full min-w-0">
+        <div class="lg:col-span-2 w-full min-w-0">
           <RoomCreateForm />
         </div>
 
