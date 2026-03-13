@@ -1,29 +1,50 @@
 <template>
   <!-- 直向：頂部緊湊橫條；橫向：右側面板 -->
   <div class="hud-portrait absolute top-0 left-0 right-0 pointer-events-auto
-              flex items-center justify-between gap-2 px-3 py-2 bg-black/75
+              flex flex-col bg-black/75
               sm:hidden">
-    <!-- 時間 -->
-    <span class="text-white font-black text-base tabular-nums">{{ raceTime }}s</span>
-    <!-- 各隊分數 -->
-    <div class="flex gap-2">
-      <span
+    <!-- 第一行：時間、分數、圈數 -->
+    <div class="flex items-center justify-between gap-2 px-3 py-2">
+      <!-- 時間 -->
+      <span class="text-white font-black text-base tabular-nums">{{ raceTime }}s</span>
+      <!-- 各隊分數 -->
+      <div class="flex items-center gap-1">
+        <template v-for="(team, idx) in teamsInfo" :key="team.teamId">
+          <span
+            class="px-2 py-0.5 text-xs font-black rounded tabular-nums"
+            :class="team.teamId === 1 ? 'bg-white/30 text-white' : 'bg-yellow-400/70 text-black'"
+          >{{ team.score }}</span>
+          <span v-if="idx < teamsInfo.length - 1" class="text-white/60 text-xs font-bold">:</span>
+        </template>
+      </div>
+      <!-- 圈數進度 -->
+      <div class="flex items-center gap-1">
+        <span class="text-white/70 text-xs">{{ laps }}圈</span>
+        <div class="w-16 bg-white/20 rounded-full h-1.5">
+          <div
+            class="bg-yellow-400 h-1.5 rounded-full transition-all"
+            :style="{ width: `${Math.round(lapProgress * 100)}%` }"
+          />
+        </div>
+      </div>
+    </div>
+    <!-- 第二行：各隊成員（超過一隊才顯示） -->
+    <div v-if="teamsInfo.length > 1" class="flex gap-3 px-3 pb-2 border-t border-white/10 pt-1">
+      <div
         v-for="team in teamsInfo"
         :key="team.teamId"
-        class="px-2 py-0.5 text-xs font-black rounded"
-        :class="team.teamId === 1 ? 'bg-white/30 text-white' : 'bg-yellow-400/70 text-black'"
+        class="flex items-center gap-1 flex-wrap"
       >
-        隊{{ team.teamId }}&nbsp;{{ team.score }}
-      </span>
-    </div>
-    <!-- 圈數進度 -->
-    <div class="flex items-center gap-1">
-      <span class="text-white/70 text-xs">{{ laps }}圈</span>
-      <div class="w-16 bg-white/20 rounded-full h-1.5">
-        <div
-          class="bg-yellow-400 h-1.5 rounded-full transition-all"
-          :style="{ width: `${Math.round(lapProgress * 100)}%` }"
-        />
+        <span
+          class="text-xs font-black px-1.5 py-0.5 rounded whitespace-nowrap"
+          :class="team.teamId === 1 ? 'bg-white/30 text-white' : 'bg-yellow-400/70 text-black'"
+        >{{ teamName(team.teamId) }}</span>
+        <span
+          v-for="member in team.members"
+          :key="member.id"
+          class="text-xs truncate max-w-[80px]"
+          :class="member.isMe ? 'text-yellow-300 font-bold' : 'text-white/80'"
+        >{{ member.name }}</span>
       </div>
     </div>
   </div>
@@ -50,7 +71,7 @@
           class="text-xs font-black uppercase tracking-widest"
           :class="team.teamId === 1 ? 'text-white' : 'text-black'"
         >
-          隊伍 {{ team.teamId }}
+          {{ teamName(team.teamId) }}
         </span>
         <span class="text-white font-black text-sm tabular-nums">{{ team.score }}</span>
       </div>
@@ -107,4 +128,13 @@ defineProps<{
   laps: number
   lapProgress: number
 }>()
+
+const TEAM_NAMES: Record<number, string> = {
+  1: '腦袋快轉隊',
+  2: '大腦當機隊',
+}
+
+function teamName(id: number): string {
+  return TEAM_NAMES[id] ?? `隊伍 ${id}`
+}
 </script>

@@ -12,7 +12,7 @@
           :class="winnerTeamId !== null ? 'bg-neo-accent' : 'bg-neo-secondary'"
         >
           <p class="font-black text-2xl sm:text-3xl uppercase">
-            {{ winnerTeamId !== null ? `隊伍 ${winnerTeamId} 獲勝！` : '平局！' }}
+            {{ winnerTeamId !== null ? `${teamName(winnerTeamId)} 獲勝！` : '平局！' }}
           </p>
         </div>
 
@@ -26,7 +26,7 @@
           >
             <div class="px-3 py-1.5 border-b-4 border-black bg-black flex justify-between items-center">
               <span class="text-white font-black uppercase tracking-widest text-sm">
-                隊伍 {{ team.teamId }}
+                {{ teamName(team.teamId) }}
               </span>
               <span class="text-white font-black text-base tabular-nums">{{ team.score }} 分</span>
             </div>
@@ -84,7 +84,7 @@ interface TeamInfo {
   members: TeamMember[]
 }
 
-defineProps<{
+const props = defineProps<{
   teamsInfo: TeamInfo[]
   winnerTeamId: number | null
   isHost: boolean
@@ -94,4 +94,13 @@ const emit = defineEmits<{
   playAgain: []
   backToRoom: []
 }>()
+
+const TEAM_NAMES: Record<number, string> = {
+  1: '腦袋快轉隊',
+  2: '大腦當機隊',
+}
+
+function teamName(id: number): string {
+  return TEAM_NAMES[id] ?? `隊伍 ${id}`
+}
 </script>

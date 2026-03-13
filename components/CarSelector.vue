@@ -7,7 +7,7 @@
         選擇車輛
       </h2>
       <p class="text-center font-bold text-black/60 mb-3 sm:mb-6 text-sm uppercase tracking-wider">
-        隊伍 {{ teamId }} ─
+        {{ teamName(teamId) }} ─
         <span :class="isSelector ? 'text-black' : 'text-black/50'">
           {{ isSelector ? '輪到你選車' : '等待隊友選車...' }}
         </span>
@@ -131,7 +131,7 @@
           class="border-2 border-black px-3 py-1 text-xs font-black uppercase"
           :class="confirmed ? 'bg-neo-accent' : 'bg-white'"
         >
-          隊伍 {{ tid }} {{ confirmed ? '✓' : '…' }}
+          {{ teamName(Number(tid)) }} {{ confirmed ? '✓' : '…' }}
         </div>
       </div>
     </div>
@@ -162,6 +162,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   confirm: [carId: string]
 }>()
+
+const TEAM_NAMES: Record<number, string> = {
+  1: '腦袋快轉隊',
+  2: '大腦當機隊',
+}
+
+function teamName(id: number): string {
+  return TEAM_NAMES[id] ?? `隊伍 ${id}`
+}
 
 const currentIndex = ref(0)
 const currentCar = computed(() => props.cars[currentIndex.value] ?? null)

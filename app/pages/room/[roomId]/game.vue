@@ -35,6 +35,7 @@
       <GameCountdown
         v-else-if="gameStore.isCountdown"
         :countdown-time="gameStore.countdownTime"
+        :teams-info="teamsInfo"
       />
 
       <!-- 比賽中 HUD -->
