@@ -52,12 +52,20 @@ export interface RaceCar {
   currentScore: number; // 當前分數
 }
 
+export type GameDifficulty = 1 | 2 | 3;
+
 export interface Obstacle {
   id: string;
   type: "wall" | "mine";
   position: Vector3;
   size: Vector3;
   boundingBox: BoundingBox;
+  /** 地雷移動速度向量（等級 2/3 才有值） */
+  velocity?: Vector3;
+  /** 地雷移動範圍半徑（以初始位置為中心） */
+  moveRange?: number;
+  /** 初始位置（供移動範圍限制使用） */
+  origin?: Vector3;
 }
 
 export interface SpeedBoost {

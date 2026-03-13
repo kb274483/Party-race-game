@@ -12,6 +12,7 @@ import type {
   SpeedBoost,
   Vector3,
   BoundingBox,
+  GameDifficulty,
 } from "../types/game";
 
 export class RaceTrackGenerator {
@@ -84,6 +85,7 @@ export class RaceTrackGenerator {
     options: { mineCount: number; boostCount: number },
     seed?: number,
     startPosition?: Vector3,
+    difficulty: GameDifficulty = 1,
   ): { mines: Obstacle[]; boosts: SpeedBoost[] } {
     const random =
       seed !== undefined ? this.makeSeededRandom(seed) : Math.random.bind(Math);
@@ -97,6 +99,10 @@ export class RaceTrackGenerator {
     // 起點安全距離（足夠讓多台並排的車輛離開起跑區）
     const START_SAFE_RADIUS = 50;
     const MAX_CANDIDATES = 600;
+
+    // 依難度決定地雷速度範圍（等級 1 無速度）
+    const mineSpeed = difficulty === 3 ? 4.5 : difficulty === 2 ? 2.0 : 0;
+    const MOVE_RANGE = 25;
 
     // --- 生成地雷 ---
     let candidates = 0;
@@ -112,16 +118,31 @@ export class RaceTrackGenerator {
         continue;
 
       const size = { x: 2.5, y: 2, z: 2.5 };
+
+      // 用 seed 決定隨機方向角，確保所有客戶端完全一致
+      const angle = random() * Math.PI * 2;
+      const velocity: Vector3 | undefined =
+        mineSpeed > 0
+          ? {
+              x: Math.cos(angle) * mineSpeed,
+              y: 0,
+              z: Math.sin(angle) * mineSpeed,
+            }
+          : undefined;
+
       mines.push({
         id: `mine_${mines.length}`,
         type: "mine",
-        position: pos,
+        position: { ...pos },
         size,
         boundingBox: {
           // y 範圍從 pos.y - 1 到 pos.y + 1，確保與車輛 AABB 重疊
           min: { x: pos.x - 1.25, y: pos.y - 1, z: pos.z - 1.25 },
           max: { x: pos.x + 1.25, y: pos.y + 1, z: pos.z + 1.25 },
         },
+        ...(velocity
+          ? { velocity, origin: { ...pos }, moveRange: MOVE_RANGE }
+          : {}),
       });
       allPlaced.push({ position: pos });
     }

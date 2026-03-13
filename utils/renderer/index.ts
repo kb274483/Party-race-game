@@ -33,18 +33,32 @@ export class GameRenderer {
 
   private cameraOffset = new THREE.Vector3(0, CAMERA_HEIGHT, -CAMERA_DISTANCE);
   private cameraLookAtOffset = new THREE.Vector3(0, 1, 15);
-  private cameraSmoothness = 0.15;
+  private cameraSmoothness = 0.3;
+
+  // 預先建立的快取物件，避免每幀 GC 壓力
+  private _camCarPos = new THREE.Vector3();
+  private _camCarQuat = new THREE.Quaternion();
+  private _camOffset = new THREE.Vector3();
+  private _camTargetPos = new THREE.Vector3();
+  private _camLookAt = new THREE.Vector3();
 
   private container: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   // 儲存 bound 參考以正確移除 listener
   private boundWindowResize: (() => void) | null = null;
 
+  private readonly isMobile: boolean;
+
   constructor() {
+    this.isMobile =
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches;
+
     this.scene = new THREE.Scene();
     // 初始 aspect 先用 1，initialize() 時會依容器尺寸修正
     this.camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // 行動裝置關閉 antialias，GPU 負擔顯著降低，視覺差異極小
+    this.renderer = new THREE.WebGLRenderer({ antialias: !this.isMobile });
     this.loader = new GLTFLoader();
   }
 
@@ -56,9 +70,15 @@ export class GameRenderer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // 行動裝置限制 pixelRatio 1.5，桌面維持 2
+    this.renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio, this.isMobile ? 1.5 : 2),
+    );
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // 行動裝置用 BasicShadowMap（效能優先），桌面用 PCFSoftShadowMap（品質優先）
+    this.renderer.shadowMap.type = this.isMobile
+      ? THREE.BasicShadowMap
+      : THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x5badec);
@@ -74,8 +94,10 @@ export class GameRenderer {
     directionalLight.shadow.camera.right = 500;
     directionalLight.shadow.camera.top = 500;
     directionalLight.shadow.camera.bottom = -500;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
+    // 行動裝置 shadow map 512，桌面 1024（原本 2048）
+    const shadowMapSize = this.isMobile ? 512 : 1024;
+    directionalLight.shadow.mapSize.width = shadowMapSize;
+    directionalLight.shadow.mapSize.height = shadowMapSize;
     directionalLight.shadow.bias = -0.0005;
     this.scene.add(directionalLight);
 
@@ -145,6 +167,10 @@ export class GameRenderer {
     this.carManager.updateCar(carId, car);
   }
 
+  updateObstacleMeshes(obstacles: Obstacle[]) {
+    this.carManager.updateObstacleMeshes(obstacles);
+  }
+
   renderCheckpoints(
     checkpoints: Array<{
       position: { x: number; y: number; z: number };
@@ -169,28 +195,27 @@ export class GameRenderer {
   // ── Camera ─────────────────────────────────────────────────────
 
   updateCamera(targetCar: RaceCar): void {
-    const carPosition = new THREE.Vector3(
+    this._camCarPos.set(
       targetCar.position.x,
       targetCar.position.y,
       targetCar.position.z,
     );
-    const carQuaternion = new THREE.Quaternion(
+    this._camCarQuat.set(
       targetCar.rotation.x,
       targetCar.rotation.y,
       targetCar.rotation.z,
       targetCar.rotation.w,
     );
 
-    const offset = this.cameraOffset.clone().applyQuaternion(carQuaternion);
-    this.camera.position.lerp(
-      carPosition.clone().add(offset),
-      this.cameraSmoothness,
-    );
+    this._camOffset.copy(this.cameraOffset).applyQuaternion(this._camCarQuat);
+    this._camTargetPos.copy(this._camCarPos).add(this._camOffset);
+    this.camera.position.lerp(this._camTargetPos, this.cameraSmoothness);
 
-    const lookAt = this.cameraLookAtOffset
-      .clone()
-      .applyQuaternion(carQuaternion);
-    this.camera.lookAt(carPosition.clone().add(lookAt));
+    this._camLookAt
+      .copy(this.cameraLookAtOffset)
+      .applyQuaternion(this._camCarQuat);
+    this._camLookAt.add(this._camCarPos);
+    this.camera.lookAt(this._camLookAt);
   }
 
   // ── Render ─────────────────────────────────────────────────────

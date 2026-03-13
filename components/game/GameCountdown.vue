@@ -60,7 +60,7 @@ defineProps<{
 }>()
 
 const TEAM_NAMES: Record<number, string> = {
-  1: '腦袋快轉隊',
+  1: '肢體障礙隊',
   2: '大腦當機隊',
 }
 

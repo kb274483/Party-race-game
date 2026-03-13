@@ -27,6 +27,9 @@ export class PhysicsEngine {
   /** 地雷命中回呼（由 useGameLoop 注入，用於觸發爆炸特效） */
   private mineHitCallback: ((position: Vector3) => void) | null = null;
 
+  /** 地雷邊界檢查輪詢索引：每幀只查 1 個地雷，把射線開銷攤平到每幀 */
+  private mineCheckIndex = 0;
+
   /** 設定地雷命中回呼 */
   onMineHit(cb: (position: Vector3) => void): void {
     this.mineHitCallback = cb;
@@ -37,6 +40,67 @@ export class PhysicsEngine {
    */
   setGroundLevel(y: number): void {
     this.groundY = y;
+  }
+
+  /**
+   * 更新移動地雷的位置（等級 2/3 每幀呼叫）
+   * isOnTrack raycasting 每幀只查 1 個地雷（輪流），消除週期性 CPU 尖峰
+   */
+  updateMines(
+    deltaTime: number,
+    obstacles: Obstacle[],
+    isOnTrack?: (pos: Vector3) => boolean,
+  ): void {
+    const movingMines = obstacles.filter(
+      (o) => o.type === "mine" && o.velocity && o.origin,
+    );
+    if (movingMines.length === 0) return;
+
+    // 本幀負責 raycasting 的地雷索引（輪流，每幀只查 1 個）
+    const checkIdx =
+      isOnTrack != null ? this.mineCheckIndex % movingMines.length : -1;
+    this.mineCheckIndex++;
+
+    for (let i = 0; i < movingMines.length; i++) {
+      const mine = movingMines[i]!;
+
+      const prevX = mine.position.x;
+      const prevZ = mine.position.z;
+
+      mine.position.x += mine.velocity!.x * deltaTime;
+      mine.position.z += mine.velocity!.z * deltaTime;
+
+      let bounced = false;
+
+      // 本幀輪到這個地雷：做 raycasting 跑道邊界檢查
+      if (i === checkIdx && !isOnTrack!(mine.position)) {
+        mine.velocity!.x = -mine.velocity!.x;
+        mine.velocity!.z = -mine.velocity!.z;
+        mine.position.x = prevX;
+        mine.position.z = prevZ;
+        bounced = true;
+      }
+
+      // moveRange 圓形備用邊界（純數學，每幀都跑無負擔）
+      if (!bounced) {
+        const dx = mine.position.x - mine.origin!.x;
+        const dz = mine.position.z - mine.origin!.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist > (mine.moveRange ?? 25)) {
+          mine.velocity!.x = -mine.velocity!.x;
+          mine.velocity!.z = -mine.velocity!.z;
+          const ratio = (mine.moveRange ?? 25) / dist;
+          mine.position.x = mine.origin!.x + dx * ratio;
+          mine.position.z = mine.origin!.z + dz * ratio;
+        }
+      }
+
+      // 同步更新 AABB
+      mine.boundingBox.min.x = mine.position.x - 1.25;
+      mine.boundingBox.max.x = mine.position.x + 1.25;
+      mine.boundingBox.min.z = mine.position.z - 1.25;
+      mine.boundingBox.max.z = mine.position.z + 1.25;
+    }
   }
 
   /**

@@ -15,6 +15,7 @@ import type {
   RaceTrack,
   ControlType,
   InputState,
+  GameDifficulty,
 } from "../types/game";
 import type { CarStats } from "../app/data/car-registry";
 
@@ -107,22 +108,24 @@ export function useGameLoop() {
   // 是否為本隊車輛的物理權威（有 accelerate 控制的玩家）
   const isPhysicsAuthority = ref(true);
   // 所有隊友的輸入狀態（key = playerId），由物理權威合併使用
-  const teammateInputs = ref<Map<string, Omit<InputState, "sequenceNumber">>>(
-    new Map(),
-  );
+  // 純 Map，不需要 Vue 響應式，遊戲迴圈直接讀取即可
+  const teammateInputs = new Map<string, Omit<InputState, "sequenceNumber">>();
 
   /**
    * 初始化遊戲
    */
   let itemSeed: number | undefined;
+  let gameDifficulty: GameDifficulty = 1;
 
   const initialize = async (
     container: HTMLElement,
     playerControls: ControlType[],
     carId: string,
     seed?: number,
+    difficulty: GameDifficulty = 1,
   ) => {
     itemSeed = seed;
+    gameDifficulty = difficulty;
     // 初始化渲染器
     renderer = new GameRenderer();
     renderer.initialize(container);
@@ -180,6 +183,7 @@ export function useGameLoop() {
       { mineCount: 20, boostCount: 10 },
       itemSeed,
       track.value!.startPosition,
+      gameDifficulty,
     );
     track.value!.obstacles = mines;
     track.value!.speedBoosts = boosts;
@@ -396,9 +400,19 @@ export function useGameLoop() {
       : inputHandler.getCurrentInputState();
 
     if (isPhysicsAuthority.value) {
+      // 更新移動地雷（等級 2/3 才有速度，等級 1 無操作）
+      if (gameDifficulty > 1) {
+        physics.updateMines(
+          deltaTime,
+          track.value.obstacles,
+          (pos) => trackCollision?.isOnTrack(pos) ?? true,
+        );
+        renderer?.updateObstacleMeshes(track.value.obstacles);
+      }
+
       // 合併所有隊友輸入（支援多人共控，如 6 人每隊 3 人）
       const mergedInput: InputState = { ...ownInput };
-      teammateInputs.value.forEach((input) => {
+      teammateInputs.forEach((input) => {
         mergedInput.accelerate = mergedInput.accelerate || input.accelerate;
         mergedInput.brake = mergedInput.brake || input.brake;
         mergedInput.turnLeft = mergedInput.turnLeft || input.turnLeft;
@@ -431,10 +445,13 @@ export function useGameLoop() {
 
       // 更新圈數追蹤
       lapTracker?.update(playerCar.position.x, playerCar.position.z);
-      laps.value = lapTracker?.getLaps() ?? 0;
-      lapProgress.value = lapTracker?.getLapProgress() ?? 0;
-      score.value = lapTracker?.getScore() ?? 0;
-      playerCar.currentScore = score.value;
+      const newLaps = lapTracker?.getLaps() ?? 0;
+      const newProgress = lapTracker?.getLapProgress() ?? 0;
+      const newScore = lapTracker?.getScore() ?? 0;
+      if (newLaps !== laps.value) laps.value = newLaps;
+      if (newProgress !== lapProgress.value) lapProgress.value = newProgress;
+      if (newScore !== score.value) score.value = newScore;
+      playerCar.currentScore = newScore;
 
       // 檢查加速帶碰撞
       const boost = physics.checkSpeedBoostCollision(
@@ -455,14 +472,27 @@ export function useGameLoop() {
       // 非物理權威：發送輸入給隊友（隊友合併後執行物理）
       networkInputSendFn?.(ownInput);
 
+      // 非物理權威也本地計算地雷移動（確定性，seed 相同結果一致）
+      if (gameDifficulty > 1) {
+        physics.updateMines(
+          deltaTime,
+          track.value.obstacles,
+          (pos) => trackCollision?.isOnTrack(pos) ?? true,
+        );
+        renderer?.updateObstacleMeshes(track.value.obstacles);
+      }
+
       // 本玩家車輛與所有遠端車輛都套用 dead reckoning
       applyDeadReckoning(deltaTime, "");
 
       // 根據從網路接收到的車輛位置更新圈數追蹤
       lapTracker?.update(playerCar.position.x, playerCar.position.z);
-      laps.value = lapTracker?.getLaps() ?? 0;
-      lapProgress.value = lapTracker?.getLapProgress() ?? 0;
-      score.value = lapTracker?.getScore() ?? 0;
+      const newLapsB = lapTracker?.getLaps() ?? 0;
+      const newProgressB = lapTracker?.getLapProgress() ?? 0;
+      const newScoreB = lapTracker?.getScore() ?? 0;
+      if (newLapsB !== laps.value) laps.value = newLapsB;
+      if (newProgressB !== lapProgress.value) lapProgress.value = newProgressB;
+      if (newScoreB !== score.value) score.value = newScoreB;
     }
   };
 
@@ -580,9 +610,7 @@ export function useGameLoop() {
     playerId: string,
     input: Omit<InputState, "sequenceNumber">,
   ): void => {
-    const next = new Map(teammateInputs.value);
-    next.set(playerId, input);
-    teammateInputs.value = next;
+    teammateInputs.set(playerId, input);
   };
 
   /**
@@ -616,7 +644,7 @@ export function useGameLoop() {
     }
 
     cars.value.clear();
-    teammateInputs.value.clear();
+    teammateInputs.clear();
     remoteSnapshots.clear();
   };
 

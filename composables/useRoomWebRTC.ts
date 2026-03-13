@@ -5,7 +5,7 @@
 
 import { ref, onUnmounted } from "vue";
 import { SignalingClient } from "../utils/signaling-client";
-import type { PlayerInfo } from "../types/game";
+import type { PlayerInfo, GameDifficulty } from "../types/game";
 
 function getSignalingWsUrl(): string {
   const url = import.meta.env.NUXT_PUBLIC_WS_URL as string | undefined;
@@ -37,7 +37,10 @@ export function useRoomWebRTC() {
         playerName: string;
         room?: any;
       }) => void;
-      onGameStarted?: (payload: { players: PlayerInfo[] }) => void;
+      onGameStarted?: (payload: {
+        players: PlayerInfo[];
+        difficulty?: GameDifficulty;
+      }) => void;
     },
   ): Promise<void> => {
     if (client.value) {
@@ -68,7 +71,10 @@ export function useRoomWebRTC() {
           break;
         case "game_started": {
           const players = (signal.payload as any)?.players ?? [];
-          callbacks?.onGameStarted?.({ players });
+          const difficulty = (signal.payload as any)?.difficulty as
+            | GameDifficulty
+            | undefined;
+          callbacks?.onGameStarted?.({ players, difficulty });
           break;
         }
       }
@@ -91,12 +97,15 @@ export function useRoomWebRTC() {
   /**
    * 廣播遊戲開始訊號（僅 Host 呼叫）
    */
-  const broadcastGameStarted = (players: PlayerInfo[]): void => {
+  const broadcastGameStarted = (
+    players: PlayerInfo[],
+    difficulty: GameDifficulty = 1,
+  ): void => {
     client.value?.sendSignal({
       type: "game_started",
       roomId: currentRoomId,
       targetId: "",
-      payload: { players },
+      payload: { players, difficulty },
     });
   };
 

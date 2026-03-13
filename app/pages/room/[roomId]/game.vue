@@ -423,6 +423,7 @@ const loadAndStart = async () => {
       playerControls.value,
       teamCarId.value,
       roomIdToSeed(roomId.value),
+      gameStore.difficulty,
     )
 
     if (isMultiplayer) {

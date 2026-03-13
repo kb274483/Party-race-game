@@ -97,9 +97,16 @@ export class CarModelManager {
 
     for (const mine of mines) {
       const group = new THREE.Group();
-      group.position.set(mine.position.x, mine.position.y + yOffset, mine.position.z);
+      group.position.set(
+        mine.position.x,
+        mine.position.y + yOffset,
+        mine.position.z,
+      );
 
-      const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 16), bodyMat);
+      const body = new THREE.Mesh(
+        new THREE.SphereGeometry(1.1, 16, 16),
+        bodyMat,
+      );
       body.position.y = 0.9;
       body.castShadow = true;
       group.add(body);
@@ -118,7 +125,10 @@ export class CarModelManager {
         group.add(spike);
       }
 
-      const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.7, 32), warningMat);
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(2.0, 2.7, 32),
+        warningMat,
+      );
       ring.rotation.x = -Math.PI / 2;
       ring.position.y = 0.08;
       group.add(ring);
@@ -149,7 +159,11 @@ export class CarModelManager {
 
     for (const boost of boosts) {
       const group = new THREE.Group();
-      group.position.set(boost.position.x, boost.position.y + yOffset, boost.position.z);
+      group.position.set(
+        boost.position.x,
+        boost.position.y + yOffset,
+        boost.position.z,
+      );
 
       const disk = new THREE.Mesh(
         new THREE.CylinderGeometry(boost.radius, boost.radius, 0.18, 32),
@@ -179,7 +193,9 @@ export class CarModelManager {
     const targetColor = new THREE.Color(color);
     carModel.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      const mats = Array.isArray(child.material)
+        ? child.material
+        : [child.material];
       const cloned = mats.map((m) => {
         const mat = (m as THREE.MeshStandardMaterial).clone();
         mat.color.set(targetColor);
@@ -194,12 +210,35 @@ export class CarModelManager {
     if (!carModel) return;
 
     const groundOffset = this.carGroundOffsets.get(carId) ?? 0;
-    carModel.position.set(car.position.x, car.position.y + groundOffset, car.position.z);
-    carModel.quaternion.set(car.rotation.x, car.rotation.y, car.rotation.z, car.rotation.w);
+    carModel.position.set(
+      car.position.x,
+      car.position.y + groundOffset,
+      car.position.z,
+    );
+    carModel.quaternion.set(
+      car.rotation.x,
+      car.rotation.y,
+      car.rotation.z,
+      car.rotation.w,
+    );
 
     const shadow = this.carShadows.get(carId);
     if (shadow) {
       shadow.position.set(car.position.x, car.position.y + 0.1, car.position.z);
+    }
+  }
+
+  /** 每幀更新移動地雷的 3D 位置（與 physics 位置保持同步） */
+  updateObstacleMeshes(obstacles: Obstacle[]): void {
+    const mines = obstacles.filter((o) => o.type === "mine");
+    for (let i = 0; i < mines.length && i < this.mineGroups.length; i++) {
+      const mine = mines[i]!;
+      const group = this.mineGroups[i]!;
+      group.position.set(
+        mine.position.x,
+        mine.position.y + this.trackYOffset,
+        mine.position.z,
+      );
     }
   }
 

@@ -58,6 +58,28 @@
         </div>
       </div>
 
+      <!-- Difficulty selector（房主專屬） -->
+      <div v-if="roomStore.isHost" class="neo-card p-6 mb-8 rotate-1">
+        <h2 class="font-black text-xl uppercase tracking-widest mb-4 border-b-4 border-black pb-2">
+          遊戲難度
+        </h2>
+        <div class="flex gap-3 flex-wrap">
+          <button
+            v-for="opt in difficultyOptions"
+            :key="opt.level"
+            type="button"
+            class="flex-1 min-w-[100px] p-3 border-4 border-black font-black transition-all active:scale-95"
+            :class="gameStore.difficulty === opt.level
+              ? 'bg-black text-white shadow-neo-md'
+              : 'bg-white text-black hover:bg-gray-100'"
+            @click="gameStore.setDifficulty(opt.level)"
+          >
+            <div class="text-sm">{{ opt.label }}</div>
+            <div class="text-xs font-bold mt-0.5 opacity-70">{{ opt.desc }}</div>
+          </button>
+        </div>
+      </div>
+
       <!-- Players list -->
       <div class="neo-card p-6 rotate-1">
         <h2 class="font-black text-xl uppercase tracking-widest mb-4 border-b-4 border-black pb-2">
@@ -102,6 +124,7 @@ import { useRoomStore } from "~~/stores/room"
 import { useGameStore } from "~~/stores/game"
 import { useRoomWebRTC } from "~~/composables/useRoomWebRTC"
 import { useWakeLock } from "~~/composables/useWakeLock"
+import type { GameDifficulty } from "~~/types/game"
 
 const route = useRoute()
 const router = useRouter()
@@ -110,7 +133,14 @@ const { initialize, cleanup, broadcastGameStarted } = useRoomWebRTC()
 
 useWakeLock()
 
+const gameStore = useGameStore()
 const copied = ref(false)
+
+const difficultyOptions: { level: GameDifficulty; label: string; desc: string }[] = [
+  { level: 1, label: '等級一', desc: '靜止地雷' },
+  { level: 2, label: '等級二', desc: '地雷慢速移動' },
+  { level: 3, label: '等級三', desc: '地雷快速移動' },
+]
 const copyRoomId = async () => {
   const id = roomStore.currentRoom?.roomId
   if (!id) return
@@ -150,10 +180,9 @@ const startGameMessage = computed(() => {
 const handleStartGame = async () => {
   if (!canStart.value) return
   const players = roomStore.players.map((p) => ({ id: p.id, name: p.name, isHost: p.isHost }))
-  const gameStore = useGameStore()
   gameStore.startGame(players)
-  // 廣播給所有成員（含玩家清單），讓他們也跳轉到遊戲頁面
-  broadcastGameStarted(players)
+  // 廣播給所有成員（含玩家清單與難度），讓他們也跳轉到遊戲頁面
+  broadcastGameStarted(players, gameStore.difficulty)
   // 稍等讓成員收到訊號後跳轉，再由 host 導航（觸發 cleanup）
   await new Promise((resolve) => setTimeout(resolve, 150))
   router.push(`/room/${roomId.value}/game`)
@@ -195,13 +224,13 @@ onMounted(async () => {
     onPlayerJoined: (payload: { playerId: string; playerName: string; room?: any }) => {
       if (payload.room) roomStore.updateRoomFromApiResponse(payload.room)
     },
-    onGameStarted: ({ players }) => {
+    onGameStarted: ({ players, difficulty }: { players: any[]; difficulty?: GameDifficulty }) => {
       // 成員收到房主的開始遊戲訊號，初始化遊戲狀態後跳轉
-      const gameStore = useGameStore()
       // 優先使用 payload 中的 players，fallback 到 roomStore
       const allPlayers = players.length > 0
         ? players
         : roomStore.players.map((p) => ({ id: p.id, name: p.name, isHost: p.isHost }))
+      if (difficulty) gameStore.setDifficulty(difficulty)
       gameStore.startGame(allPlayers)
       router.push(`/room/${roomId.value}/game`)
     },

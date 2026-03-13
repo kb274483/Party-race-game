@@ -6,7 +6,11 @@
 import { defineStore } from "pinia";
 import { GamePhase } from "../types/game";
 import { ControlAllocator } from "../utils/control-allocator";
-import type { ControlAssignment, PlayerInfo } from "../types/game";
+import type {
+  ControlAssignment,
+  PlayerInfo,
+  GameDifficulty,
+} from "../types/game";
 
 interface GameState {
   phase: GamePhase;
@@ -23,6 +27,8 @@ interface GameState {
   carConfirmed: Record<number, boolean>;
   /** 各隊選車代表的 playerId（每隊第一個人負責選）*/
   selectorPlayerIds: Record<number, string>;
+  /** 遊戲難度等級（1=靜止地雷、2=慢速移動、3=快速移動） */
+  difficulty: GameDifficulty;
 }
 const GAME_TIME = 120;
 export const useGameStore = defineStore("game", {
@@ -38,6 +44,7 @@ export const useGameStore = defineStore("game", {
     selectedCars: {},
     carConfirmed: {},
     selectorPlayerIds: {},
+    difficulty: 1,
   }),
 
   getters: {
@@ -138,6 +145,11 @@ export const useGameStore = defineStore("game", {
       this.phase = GamePhase.FINISHED;
     },
 
+    /** 設定難度 */
+    setDifficulty(level: GameDifficulty): void {
+      this.difficulty = level;
+    },
+
     /** 設定錯誤 */
     setError(message: string | null): void {
       this.error = message;
@@ -156,6 +168,7 @@ export const useGameStore = defineStore("game", {
       this.selectedCars = {};
       this.carConfirmed = {};
       this.selectorPlayerIds = {};
+      // difficulty 保留上次設定，不重置
     },
   },
 });
