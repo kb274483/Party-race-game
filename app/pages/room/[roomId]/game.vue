@@ -104,36 +104,11 @@ const playerControls = ref<ControlType[]>([])
 // 本玩家的 player ID（用於查找控制分配）
 const myPlayerId = computed(() => roomStore.currentPlayerId ?? 'player1')
 
-// ── 行動裝置方向偵測 ──────────────────────────────────────────
-const isPortrait = ref(false)
-
 const isTouchDevice = typeof window !== 'undefined'
   && window.matchMedia('(pointer: coarse)').matches
 
-const isMobilePortrait = computed(() => isTouchDevice && isPortrait.value)
-
-// 使用 visualViewport（行動裝置更即時）或 fallback 到 window
-const updateOrientation = () => {
-  const vv = window.visualViewport
-  const w = vv ? vv.width : window.innerWidth
-  const h = vv ? vv.height : window.innerHeight
-  isPortrait.value = h > w
-}
-
-// orientationchange 會在 viewport 尺寸更新前觸發，稍等一幀再讀取
-const onOrientationChange = () => {
-  requestAnimationFrame(() => {
-    setTimeout(updateOrientation, 50)
-  })
-}
-
 // 防止下拉重整（passive:false 才能 preventDefault）
 let preventScrollFn: ((e: TouchEvent) => void) | null = null
-
-const tryLockLandscape = async () => {
-  await document.documentElement.requestFullscreen?.().catch(() => {})
-  ;(screen.orientation as any)?.lock?.('landscape')?.catch?.(() => {})
-}
 
 // ── 玩家資訊 ──────────────────────────────────────────────────
 const isHost = computed(() =>
@@ -525,10 +500,6 @@ onMounted(async () => {
     return
   }
 
-  updateOrientation()
-  window.visualViewport?.addEventListener('resize', updateOrientation)
-  window.addEventListener('resize', updateOrientation)
-  window.addEventListener('orientationchange', onOrientationChange)
   if (isTouchDevice) {
     // 不強制鎖定橫向，讓玩家用直向也能遊玩
     // 禁止下拉重整
@@ -548,9 +519,6 @@ onBeforeUnmount(() => {
   gameLoop.setNetworkSend(null)
   gameNetwork.disconnect()
   gameLoop.dispose()
-  window.visualViewport?.removeEventListener('resize', updateOrientation)
-  window.removeEventListener('resize', updateOrientation)
-  window.removeEventListener('orientationchange', onOrientationChange)
   if (preventScrollFn) {
     document.removeEventListener('touchmove', preventScrollFn)
     preventScrollFn = null
