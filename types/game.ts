@@ -89,32 +89,10 @@ export interface RaceTrack {
   speedBoosts: SpeedBoost[];
 }
 
-export interface Team {
-  id: number;
-  playerIds: string[];
-  carId: string;
-  score: number;
-}
-
 export interface ControlAssignment {
   playerId: string;
   teamId: number;
   controls: ControlType[];
-}
-
-export interface GameState {
-  gameId: string;
-  roomId: string;
-  timestamp: number;
-  sequenceNumber: number;
-  phase: GamePhase;
-  countdownTime: number;
-  raceTime: number;
-  track: RaceTrack;
-  cars: Map<string, RaceCar>;
-  teams: Map<number, Team>;
-  controlAssignments: Map<string, ControlAssignment>;
-  scores: Map<number, number>;
 }
 
 export interface InputState {
@@ -136,19 +114,6 @@ export interface Collision {
   position: Vector3;
   normal: Vector3;
   object: any;
-}
-
-export interface WinnerInfo {
-  winnerTeamId: number | null;
-  scores: Map<number, number>;
-  isSinglePlayer: boolean;
-}
-
-export interface UIState {
-  remainingTime: number;
-  teamScores: Map<number, number>;
-  playerControls: Map<string, ControlType[]>;
-  teamRoster: Map<number, PlayerInfo[]>;
 }
 
 export interface PlayerInfo {

@@ -5,14 +5,14 @@
 
 import type { SignalMessage } from "../types/network";
 
-export interface SignalingClientConfig {
+interface SignalingClientConfig {
   serverUrl: string;
   playerId: string;
   roomId?: string;
 }
 
-export type SignalReceivedCallback = (signal: SignalMessage) => void;
-export type ConnectionStateCallback = (connected: boolean) => void;
+type SignalReceivedCallback = (signal: SignalMessage) => void;
+type ConnectionStateCallback = (connected: boolean) => void;
 
 /**
  * Signaling Client 類別

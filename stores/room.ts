@@ -17,7 +17,7 @@ function getApiBase(): string {
 }
 
 /** 後端 API 回傳的房間格式（players 為 object） */
-export interface RoomApiResponse {
+interface RoomApiResponse {
   id: string;
   hostId: string;
   players: Record<
@@ -28,8 +28,8 @@ export interface RoomApiResponse {
   password?: string;
 }
 
-/** 將後端 API 回傳格式轉換為 RoomInfo（匯出供其他模組使用） */
-export function normalizeRoomResponse(res: RoomApiResponse): RoomInfo {
+/** 將後端 API 回傳格式轉換為 RoomInfo */
+function normalizeRoomResponse(res: RoomApiResponse): RoomInfo {
   const players: PlayerInfo[] = Object.values(res.players).map((p) => ({
     id: p.id,
     name: p.name,
