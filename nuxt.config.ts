@@ -5,6 +5,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
+      title: 'PartyRace｜手忙腳亂賽車',
       meta: [
         {
           name: "viewport",
@@ -13,6 +14,7 @@ export default defineNuxtConfig({
         },
       ],
       link: [
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' } ,
         {
           rel: "preconnect",
           href: "https://fonts.googleapis.com",

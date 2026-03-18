@@ -3,7 +3,7 @@
     <div class="neo-card p-6 border-neo-accent bg-neo-accent/20">
       <p class="font-bold text-center">{{ error }}</p>
       <p class="text-sm text-black/60 mt-2 text-center">
-        請將 raceTrack.glb、sportCar.glb 放置於 public/blender/
+        .glb 模型檔案載入失敗，請檢查相關檔案是否存在
       </p>
       <div class="flex flex-col gap-3 mt-4">
         <button
