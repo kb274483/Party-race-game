@@ -1,5 +1,5 @@
 <template>
-  <div class="game-container fixed inset-0 overflow-hidden bg-black">
+  <div class="game-container fixed inset-0 overflow-hidden bg-black select-none" style="-webkit-touch-callout: none; -webkit-user-select: none;">
     <!-- 3D 遊戲畫布 -->
     <div ref="canvasContainer" class="w-full h-full"></div>
 
