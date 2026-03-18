@@ -95,6 +95,9 @@ const safeAreaStyle = computed(() => ({
 /* 只在行動裝置（pointer: coarse = 觸控螢幕）顯示，直向橫向均支援 */
 .virtual-controls {
   display: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 @media (pointer: coarse) {
@@ -117,6 +120,7 @@ const safeAreaStyle = computed(() => ({
   align-items: center;
   justify-content: center;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
