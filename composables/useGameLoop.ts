@@ -129,6 +129,7 @@ export function useGameLoop() {
     // 初始化渲染器
     renderer = new GameRenderer();
     renderer.initialize(container);
+    renderer.applyEnvironment(difficulty);
 
     // 初始化物理引擎
     physics = new PhysicsEngine();

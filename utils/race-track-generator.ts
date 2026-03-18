@@ -101,7 +101,7 @@ export class RaceTrackGenerator {
     const MAX_CANDIDATES = 600;
 
     // 依難度決定地雷速度範圍（等級 1 無速度）
-    const mineSpeed = difficulty === 3 ? 4.5 : difficulty === 2 ? 2.0 : 0;
+    const mineSpeed = difficulty >= 3 ? 4.5 : difficulty === 2 ? 2.0 : 0;
     const MOVE_RANGE = 25;
 
     // --- 生成地雷 ---

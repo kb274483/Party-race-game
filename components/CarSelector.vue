@@ -20,8 +20,8 @@
           v-if="isSelector"
           type="button"
           class="neo-btn-outline w-12 h-12 flex items-center justify-center text-xl font-black mr-4 shrink-0"
-          :disabled="currentIndex === 0 || isLoadingPreview"
-          :class="(currentIndex === 0 || isLoadingPreview) ? 'opacity-30 cursor-not-allowed' : ''"
+          :disabled="currentIndex === 0 || isLoadingPreview || confirmedCarId !== null"
+          :class="(currentIndex === 0 || isLoadingPreview || confirmedCarId !== null) ? 'opacity-30 cursor-not-allowed' : ''"
           @click="prev"
         >
           ‹
@@ -60,8 +60,8 @@
           v-if="isSelector"
           type="button"
           class="neo-btn-outline w-12 h-12 flex items-center justify-center text-xl font-black ml-4 shrink-0"
-          :disabled="currentIndex === cars.length - 1 || isLoadingPreview"
-          :class="(currentIndex === cars.length - 1 || isLoadingPreview) ? 'opacity-30 cursor-not-allowed' : ''"
+          :disabled="currentIndex === cars.length - 1 || isLoadingPreview || confirmedCarId !== null"
+          :class="(currentIndex === cars.length - 1 || isLoadingPreview || confirmedCarId !== null) ? 'opacity-30 cursor-not-allowed' : ''"
           @click="next"
         >
           ›

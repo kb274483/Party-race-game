@@ -304,6 +304,10 @@ const startCountdownLoop = () => {
   countdownTimerId = setInterval(() => {
     const next = gameStore.countdownTime - 1
     gameStore.setCountdownTime(next)
+    // Host 廣播倒數時間給所有玩家
+    if (gameStore.gamePlayers.length > 1) {
+      gameNetwork.sendGameTime('countdown', next)
+    }
     if (next <= 0) {
       clearTimers()
       gameStore.startRacing()
@@ -317,6 +321,10 @@ const startRaceLoop = () => {
   raceTimerId = setInterval(() => {
     const next = gameStore.raceTime - 1
     gameStore.setRaceTime(next)
+    // Host 廣播比賽剩餘時間給所有玩家
+    if (gameStore.gamePlayers.length > 1) {
+      gameNetwork.sendGameTime('race', next)
+    }
     if (next <= 0) {
       clearTimers()
       gameStore.finishGame()
@@ -444,6 +452,29 @@ const loadAndStart = async () => {
           disconnectedPlayerNames.value = disconnectedPlayerNames.value.filter(n => n !== name)
         }, 5000)
       })
+
+      // 非 Host：接收 Host 廣播的權威時間，直接覆蓋本地計時
+      // 這樣無論各裝置載入速度差異或 setInterval 漂移，所有人都跟 Host 同步
+      if (!isHost.value) {
+        gameNetwork.onGameTime((phase, time) => {
+          if (phase === 'countdown') {
+            gameStore.setCountdownTime(time)
+            if (time <= 0 && gameStore.isCountdown) {
+              clearTimers()
+              gameStore.startRacing()
+              gameLoop.unlockInput()
+              startRaceLoop()
+            }
+          } else if (phase === 'race') {
+            gameStore.setRaceTime(time)
+            if (time <= 0 && gameStore.isRacing) {
+              clearTimers()
+              gameStore.finishGame()
+              gameLoop.stop()
+            }
+          }
+        })
+      }
     }
 
     gameStore.setTrackLoaded()

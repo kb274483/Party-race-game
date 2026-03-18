@@ -11,6 +11,7 @@ import type {
   Obstacle,
   SpeedBoost,
   BoundingBox,
+  GameDifficulty,
 } from "../../types/game";
 import { TrackLoader } from "./track-loader";
 import { CarModelManager } from "./car-model-manager";
@@ -41,6 +42,10 @@ export class GameRenderer {
   private _camOffset = new THREE.Vector3();
   private _camTargetPos = new THREE.Vector3();
   private _camLookAt = new THREE.Vector3();
+
+  private ambientLight!: THREE.AmbientLight;
+  private sunLight!: THREE.DirectionalLight;
+  private fillLight!: THREE.DirectionalLight;
 
   private container: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -84,26 +89,26 @@ export class GameRenderer {
     this.scene.background = new THREE.Color(0x5badec);
     this.scene.fog = new THREE.Fog(0x5badec, 300, 750);
 
-    const ambientLight = new THREE.AmbientLight(0xfff4e0, 1.0);
-    this.scene.add(ambientLight);
+    this.ambientLight = new THREE.AmbientLight(0xfff4e0, 1.0);
+    this.scene.add(this.ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffd93d, 1.2);
-    directionalLight.position.set(100, 200, 100);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.camera.left = -500;
-    directionalLight.shadow.camera.right = 500;
-    directionalLight.shadow.camera.top = 500;
-    directionalLight.shadow.camera.bottom = -500;
+    this.sunLight = new THREE.DirectionalLight(0xffd93d, 1.2);
+    this.sunLight.position.set(100, 200, 100);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.camera.left = -500;
+    this.sunLight.shadow.camera.right = 500;
+    this.sunLight.shadow.camera.top = 500;
+    this.sunLight.shadow.camera.bottom = -500;
     // 行動裝置 shadow map 512，桌面 1024（原本 2048）
     const shadowMapSize = this.isMobile ? 512 : 1024;
-    directionalLight.shadow.mapSize.width = shadowMapSize;
-    directionalLight.shadow.mapSize.height = shadowMapSize;
-    directionalLight.shadow.bias = -0.0005;
-    this.scene.add(directionalLight);
+    this.sunLight.shadow.mapSize.width = shadowMapSize;
+    this.sunLight.shadow.mapSize.height = shadowMapSize;
+    this.sunLight.shadow.bias = -0.0005;
+    this.scene.add(this.sunLight);
 
-    const fillLight = new THREE.DirectionalLight(0xc4b5fd, 0.4);
-    fillLight.position.set(-100, 50, -100);
-    this.scene.add(fillLight);
+    this.fillLight = new THREE.DirectionalLight(0xc4b5fd, 0.4);
+    this.fillLight.position.set(-100, 50, -100);
+    this.scene.add(this.fillLight);
 
     this.trackLoader = new TrackLoader(this.scene, this.loader);
     this.carManager = new CarModelManager(this.scene, this.loader);
@@ -121,6 +126,27 @@ export class GameRenderer {
     // window resize 作為 fallback（舊版瀏覽器）
     this.boundWindowResize = this.onWindowResize.bind(this);
     window.addEventListener("resize", this.boundWindowResize);
+  }
+
+  // ── Environment ────────────────────────────────────────────────
+
+  /**
+   * 依難度套用場景環境（需在 loadCar 之前呼叫）
+   * 難度 4 = 夜間模式：深色天空、低環境光、月光、車頭燈
+   */
+  applyEnvironment(difficulty: GameDifficulty): void {
+    if (difficulty === 4) {
+      this.scene.background = new THREE.Color(0x05050f);
+      this.scene.fog = new THREE.Fog(0x05050f, 50, 180);
+      this.ambientLight.color.set(0x0a1020);
+      this.ambientLight.intensity = 0.1;
+      this.sunLight.color.set(0x4455aa);
+      this.sunLight.intensity = 0.15;
+      this.sunLight.position.set(-100, 200, -100);
+      this.fillLight.intensity = 0;
+      this.carManager.setNightMode(true);
+    }
+    // 難度 1-3：白天模式，initialize() 預設值即正確，不需處理
   }
 
   // ── Track ──────────────────────────────────────────────────────

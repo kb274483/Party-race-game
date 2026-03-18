@@ -27,7 +27,7 @@ interface GameState {
   carConfirmed: Record<number, boolean>;
   /** 各隊選車代表的 playerId（每隊第一個人負責選）*/
   selectorPlayerIds: Record<number, string>;
-  /** 遊戲難度等級（1=靜止地雷、2=慢速移動、3=快速移動） */
+  /** 遊戲難度等級（1=靜止地雷、2=慢速移動、3=快速移動、4=夜間模式+快速地雷） */
   difficulty: GameDifficulty;
 }
 const GAME_TIME = 120;

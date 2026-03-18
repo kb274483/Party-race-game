@@ -35,6 +35,9 @@ type GameActionCallback = (action: GameAction) => void;
 type CarConfirmCallback = (teamId: number, carId: string) => void;
 type PlayerDisconnectCallback = (playerId: string) => void;
 
+type GameTimePhase = "countdown" | "race";
+type GameTimeCallback = (phase: GameTimePhase, time: number) => void;
+
 function getWsUrl(): string {
   const url = import.meta.env.NUXT_PUBLIC_WS_URL as string | undefined;
   if (url) return url;
@@ -51,6 +54,7 @@ export function useGameNetwork() {
   let gameActionCallback: GameActionCallback | null = null;
   let carConfirmCallback: CarConfirmCallback | null = null;
   let playerDisconnectCallback: PlayerDisconnectCallback | null = null;
+  let gameTimeCallback: GameTimeCallback | null = null;
   let currentPlayerId = "";
   let currentRoomId = "";
   let lastSendTime = 0;
@@ -104,6 +108,12 @@ export function useGameNetwork() {
         carId: string;
       };
       carConfirmCallback?.(teamId, carId);
+    } else if (signal.type === "game_time") {
+      const { phase, time } = signal.payload as {
+        phase: GameTimePhase;
+        time: number;
+      };
+      gameTimeCallback?.(phase, time);
     } else if (
       signal.type === "player_left" ||
       signal.type === "player_disconnect"
@@ -194,6 +204,26 @@ export function useGameNetwork() {
   };
 
   /**
+   * Host 廣播目前計時（每秒呼叫，讓所有玩家時間保持一致）
+   */
+  const sendGameTime = (phase: GameTimePhase, time: number): void => {
+    if (!signalingClient?.isConnected()) return;
+    signalingClient.sendSignal({
+      type: "game_time",
+      roomId: currentRoomId,
+      targetId: "",
+      payload: { phase, time },
+    });
+  };
+
+  /**
+   * 非 Host 玩家註冊接收計時同步的 callback
+   */
+  const onGameTime = (cb: GameTimeCallback): void => {
+    gameTimeCallback = cb;
+  };
+
+  /**
    * 廣播選車確認（選車代表呼叫）
    */
   const sendCarConfirm = (teamId: number, carId: string): void => {
@@ -231,6 +261,7 @@ export function useGameNetwork() {
     gameActionCallback = null;
     carConfirmCallback = null;
     playerDisconnectCallback = null;
+    gameTimeCallback = null;
   };
 
   return {
@@ -241,6 +272,8 @@ export function useGameNetwork() {
     onRemotePlayerInput,
     sendGameAction,
     onGameAction,
+    sendGameTime,
+    onGameTime,
     sendCarConfirm,
     onCarConfirm,
     onPlayerDisconnect,

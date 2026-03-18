@@ -1,5 +1,5 @@
 /**
- * useRoomWebRTC
+ * useRoomSignaling
  * 房間頁面的信令整合，透過 WebSocket 處理房間事件
  */
 
@@ -16,7 +16,7 @@ function getSignalingWsUrl(): string {
   return `${protocol}://${host}:8080/ws`;
 }
 
-export function useRoomWebRTC() {
+export function useRoomSignaling() {
   const client = ref<SignalingClient | null>(null);
   const isInitialized = ref(false);
   let currentRoomId = "";
@@ -41,6 +41,7 @@ export function useRoomWebRTC() {
         players: PlayerInfo[];
         difficulty?: GameDifficulty;
       }) => void;
+      onDifficultyChanged?: (difficulty: GameDifficulty) => void;
     },
   ): Promise<void> => {
     if (client.value) {
@@ -77,6 +78,13 @@ export function useRoomWebRTC() {
           callbacks?.onGameStarted?.({ players, difficulty });
           break;
         }
+        case "difficulty_changed": {
+          const difficulty = (signal.payload as any)?.difficulty as
+            | GameDifficulty
+            | undefined;
+          if (difficulty) callbacks?.onDifficultyChanged?.(difficulty);
+          break;
+        }
       }
     });
 
@@ -109,7 +117,25 @@ export function useRoomWebRTC() {
     });
   };
 
+  /**
+   * 廣播難度變更（僅 Host 呼叫，讓其他玩家即時看到選擇）
+   */
+  const broadcastDifficultyChanged = (difficulty: GameDifficulty): void => {
+    client.value?.sendSignal({
+      type: "difficulty_changed",
+      roomId: currentRoomId,
+      targetId: "",
+      payload: { difficulty },
+    });
+  };
+
   onUnmounted(cleanup);
 
-  return { isInitialized, initialize, cleanup, broadcastGameStarted };
+  return {
+    isInitialized,
+    initialize,
+    cleanup,
+    broadcastGameStarted,
+    broadcastDifficultyChanged,
+  };
 }

@@ -80,6 +80,27 @@
         </div>
       </div>
 
+      <!-- Difficulty display（非房主，顯示房主選擇的難度） -->
+      <div v-else class="neo-card p-6 mb-8 rotate-1">
+        <h2 class="font-black text-xl uppercase tracking-widest mb-4 border-b-4 border-black pb-2">
+          遊戲難度
+        </h2>
+        <div class="flex gap-3 flex-wrap">
+          <div
+            v-for="opt in difficultyOptions"
+            :key="opt.level"
+            class="flex-1 min-w-[100px] p-3 border-4 border-black font-black"
+            :class="gameStore.difficulty === opt.level
+              ? 'bg-black text-white shadow-neo-md'
+              : 'bg-white text-black opacity-40'"
+          >
+            <div class="text-sm">{{ opt.label }}</div>
+            <div class="text-xs font-bold mt-0.5 opacity-70">{{ opt.desc }}</div>
+          </div>
+        </div>
+        <p class="text-xs font-bold text-black/40 mt-3">由房主決定難度</p>
+      </div>
+
       <!-- Players list -->
       <div class="neo-card p-6 rotate-1">
         <h2 class="font-black text-xl uppercase tracking-widest mb-4 border-b-4 border-black pb-2">
@@ -119,17 +140,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoomStore } from "~~/stores/room"
 import { useGameStore } from "~~/stores/game"
-import { useRoomWebRTC } from "~~/composables/useRoomWebRTC"
+import { useRoomSignaling } from "~~/composables/useRoomSignaling"
 import { useWakeLock } from "~~/composables/useWakeLock"
 import type { GameDifficulty } from "~~/types/game"
 
 const route = useRoute()
 const router = useRouter()
 const roomStore = useRoomStore()
-const { initialize, cleanup, broadcastGameStarted } = useRoomWebRTC()
+const { initialize, cleanup, broadcastGameStarted, broadcastDifficultyChanged } = useRoomSignaling()
 
 useWakeLock()
 
@@ -140,7 +161,15 @@ const difficultyOptions: { level: GameDifficulty; label: string; desc: string }[
   { level: 1, label: '等級一', desc: '靜止地雷' },
   { level: 2, label: '等級二', desc: '地雷慢速移動' },
   { level: 3, label: '等級三', desc: '地雷快速移動' },
+  { level: 4, label: '等級四', desc: '夜間模式 + 快速地雷' },
 ]
+
+// 房主變更難度時廣播給所有玩家
+watch(() => gameStore.difficulty, (newDifficulty) => {
+  if (roomStore.isHost) {
+    broadcastDifficultyChanged(newDifficulty)
+  }
+})
 const copyRoomId = async () => {
   const id = roomStore.currentRoom?.roomId
   if (!id) return
@@ -223,6 +252,11 @@ onMounted(async () => {
     },
     onPlayerJoined: (payload: { playerId: string; playerName: string; room?: any }) => {
       if (payload.room) roomStore.updateRoomFromApiResponse(payload.room)
+      // 房主立即廣播目前難度，讓新加入的玩家同步
+      if (roomStore.isHost) broadcastDifficultyChanged(gameStore.difficulty)
+    },
+    onDifficultyChanged: (difficulty: GameDifficulty) => {
+      gameStore.setDifficulty(difficulty)
     },
     onGameStarted: ({ players, difficulty }: { players: any[]; difficulty?: GameDifficulty }) => {
       // 成員收到房主的開始遊戲訊號，初始化遊戲狀態後跳轉

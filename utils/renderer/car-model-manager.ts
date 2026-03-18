@@ -12,16 +12,23 @@ export class CarModelManager {
   private carModels: Map<string, THREE.Group> = new Map();
   private carGroundOffsets: Map<string, number> = new Map();
   private carShadows: Map<string, THREE.Mesh> = new Map();
+  private carHeadlights: Map<string, THREE.Light[]> = new Map();
   private mineGroups: THREE.Group[] = [];
   private boostGroups: THREE.Group[] = [];
   private checkpointMarkers: THREE.Mesh[] = [];
   /** renderObstacles 的 yOffset，供 ExplosionEffect 定位使用 */
   trackYOffset: number = 0;
+  private nightMode: boolean = false;
 
   constructor(
     private readonly scene: THREE.Scene,
     private readonly loader: GLTFLoader,
   ) {}
+
+  /** 啟用夜間模式（需在 loadCar / renderObstacles 之前呼叫） */
+  setNightMode(enabled: boolean): void {
+    this.nightMode = enabled;
+  }
 
   async loadCar(carId: string, carPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -46,6 +53,10 @@ export class CarModelManager {
           this.carGroundOffsets.set(carId, -boxAfter.min.y + 2.8);
           this.carModels.set(carId, carModel);
           this.scene.add(carModel);
+
+          if (this.nightMode) {
+            this.addHeadlights(carId, carModel);
+          }
 
           // blob shadow
           const shadowMesh = new THREE.Mesh(
@@ -87,12 +98,14 @@ export class CarModelManager {
       metalness: 0.9,
     });
     const spikeMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b });
-    const warningMat = new THREE.MeshBasicMaterial({
-      color: 0xff6b6b,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.85,
-    });
+    const warningMat = this.nightMode
+      ? null
+      : new THREE.MeshBasicMaterial({
+          color: 0xff6b6b,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85,
+        });
     const fromAxis = new THREE.Vector3(0, 1, 0);
 
     for (const mine of mines) {
@@ -125,13 +138,15 @@ export class CarModelManager {
         group.add(spike);
       }
 
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(2.0, 2.7, 32),
-        warningMat,
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.y = 0.08;
-      group.add(ring);
+      if (warningMat) {
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(2.0, 2.7, 32),
+          warningMat,
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.08;
+        group.add(ring);
+      }
 
       this.scene.add(group);
       this.mineGroups.push(group);
@@ -270,7 +285,59 @@ export class CarModelManager {
     });
   }
 
+  /**
+   * 在車頭位置加入兩盞 SpotLight 作為車頭燈
+   * 車輛 local 座標系：+Z = 車頭方向，±X = 左右，+Y = 上
+   * SpotLight 與 target 同為 carModel 子物件，隨車旋轉後方向保持一致
+   */
+  /**
+   * 在車頭加兩盞 SpotLight（車頭燈）、車尾加兩盞 PointLight（尾燈）
+   * 車輛 local 座標系：+Z = 車頭，-Z = 車尾，±X = 左右，+Y = 上
+   * 所有燈光皆為 carModel 子物件，隨車旋轉自動更新世界座標
+   */
+  private addHeadlights(carId: string, carModel: THREE.Group): void {
+    const lights: THREE.Light[] = [];
+
+    // ── 車頭燈（SpotLight，朝前照射）────────────────────────────
+    for (const xOffset of [-0.4, 0.4]) {
+      const headlight = new THREE.SpotLight(
+        0xffffff, // 暖白色
+        10, // intensity
+        80, // 照射距離
+        Math.PI * 0.15, // 半角約 27°
+        0.3, // penumbra 柔化邊緣
+        2, // decay
+      );
+      headlight.position.set(xOffset, 0.4, 1.5);
+
+      const target = new THREE.Object3D();
+      target.position.set(xOffset, -0.5, 15);
+
+      carModel.add(headlight);
+      carModel.add(target);
+      headlight.target = target;
+      lights.push(headlight);
+    }
+
+    for (const xOffset of [-0.3, 0.3]) {
+      const taillight = new THREE.PointLight(
+        0xff2200, // 紅色
+        0.5, // 淡淡的強度
+        6, // 短範圍，只在車尾附近發光
+        2, // decay
+      );
+      taillight.position.set(xOffset, 1.3, -1.5); 
+      carModel.add(taillight);
+      lights.push(taillight);
+    }
+
+    this.carHeadlights.set(carId, lights);
+  }
+
   dispose(): void {
+    this.carHeadlights.forEach((lights) => lights.forEach((l) => l.dispose()));
+    this.carHeadlights.clear();
+
     this.carModels.forEach((model) => this.scene.remove(model));
     this.carModels.clear();
     this.carGroundOffsets.clear();
