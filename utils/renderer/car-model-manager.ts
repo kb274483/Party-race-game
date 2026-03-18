@@ -304,11 +304,11 @@ export class CarModelManager {
         0xffffff, // 暖白色
         10, // intensity
         80, // 照射距離
-        Math.PI * 0.15, // 半角約 27°
+        Math.PI * 0.16 ,
         0.3, // penumbra 柔化邊緣
         2, // decay
       );
-      headlight.position.set(xOffset, 0.4, 1.5);
+      headlight.position.set(xOffset, 0.8, 0.9);
 
       const target = new THREE.Object3D();
       target.position.set(xOffset, -0.5, 15);
@@ -326,7 +326,7 @@ export class CarModelManager {
         6, // 短範圍，只在車尾附近發光
         2, // decay
       );
-      taillight.position.set(xOffset, 1.3, -1.5); 
+      taillight.position.set(xOffset, 1 , -2.3); 
       carModel.add(taillight);
       lights.push(taillight);
     }
