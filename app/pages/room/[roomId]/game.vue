@@ -109,6 +109,8 @@ const isTouchDevice = typeof window !== 'undefined'
 
 // 防止下拉重整（passive:false 才能 preventDefault）
 let preventScrollFn: ((e: TouchEvent) => void) | null = null
+// 防止長按文字選取（iOS 放大鏡 / Android 選取框）
+let preventSelectFn: ((e: Event) => void) | null = null
 
 // ── 玩家資訊 ──────────────────────────────────────────────────
 const isHost = computed(() =>
@@ -540,6 +542,13 @@ onMounted(async () => {
     document.body.style.overscrollBehavior = 'none'
   }
 
+  // 攔截文字選取事件（iOS 放大鏡 / Android 選取框的根源）
+  // selectstart：開始選取文字時觸發；contextmenu：長按觸發右鍵選單
+  // 不限 isTouchDevice，桌面也一起保護，確保遊戲中不會誤觸
+  preventSelectFn = (e: Event) => e.preventDefault()
+  document.addEventListener('selectstart', preventSelectFn)
+  document.addEventListener('contextmenu', preventSelectFn)
+
   if (gameStore.phase === GamePhase.WAITING && !gameStore.isLoaded) {
     await loadAndStart()
   }
@@ -554,6 +563,11 @@ onBeforeUnmount(() => {
     document.removeEventListener('touchmove', preventScrollFn)
     preventScrollFn = null
   }
+  if (preventSelectFn) {
+    document.removeEventListener('selectstart', preventSelectFn)
+    document.removeEventListener('contextmenu', preventSelectFn)
+    preventSelectFn = null
+  }
   document.body.style.overscrollBehavior = ''
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {})
@@ -566,5 +580,13 @@ onBeforeUnmount(() => {
   /* fixed inset-0 透過 Tailwind class 設定，此處補強 touch 行為 */
   touch-action: none;
   -webkit-overflow-scrolling: touch;
+}
+
+/* 強制穿透所有子元件，確保沒有任何元素可以被選取或觸發放大鏡 */
+.game-container :deep(*) {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
 }
 </style>
