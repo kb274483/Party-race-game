@@ -317,7 +317,7 @@ export class PhysicsEngine {
    * 獲取賽車的 AABB 邊界框
    */
   private getCarBoundingBox(car: RaceCar): BoundingBox {
-    const halfSize = { x: 1, y: 0.5, z: 2 }; // 賽車的半尺寸
+    const halfSize = { x: 0.6, y: 0.5, z: 2 }; // 賽車的半尺寸
 
     return {
       min: {
@@ -454,9 +454,11 @@ export class PhysicsEngine {
    */
   applySpeedBoost(car: RaceCar, duration: number = 3000): void {
     if (!car.hasSpeedBoost) {
-      car.maxSpeed *= 1.8; // 速度提升 1.5 倍，持續 3 秒
+      car.maxSpeed *= 1.8;
       car.hasSpeedBoost = true;
     }
+    // 立即推進：直接把速度衝到提升後的上限，產生加速帶衝刺感
+    car.speed = car.maxSpeed;
     car.boostEndTime = Date.now() + duration;
   }
 
@@ -485,7 +487,7 @@ export class PhysicsEngine {
     const w2 = car2.weight ?? 1.0;
 
     // ── 1. SAT 位置分離（每幀，防止穿透）────────────────────────
-    const carHalfX = 1.0;
+    const carHalfX = 0.6;
     const carHalfZ = 2.0;
     const dx = Math.abs(car1.position.x - car2.position.x);
     const dz = Math.abs(car1.position.z - car2.position.z);

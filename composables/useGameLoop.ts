@@ -206,7 +206,7 @@ export function useGameLoop() {
     const { mines, boosts } = trackGenerator.generateOnTrackItems(
       track.value!.playableBounds,
       (pos) => trackCollision!.isOnTrack(pos),
-      { mineCount: 20, boostCount: 10 },
+      { mineCount: 25, boostCount: 15 },
       itemSeed,
       track.value!.startPosition,
       gameDifficulty,
@@ -214,7 +214,7 @@ export function useGameLoop() {
     track.value!.obstacles = mines;
     track.value!.speedBoosts = boosts;
 
-    const yOffset = 2.9;
+    const yOffset = 2.7;
     renderer.renderObstacles(track.value!.obstacles, yOffset);
     renderer.renderSpeedBoosts(track.value!.speedBoosts, yOffset);
 
@@ -244,7 +244,10 @@ export function useGameLoop() {
       const player = allPlayers[i]!;
       const carFile = getCarFile(player.id);
       const stats = getCarStats(player.id);
-      await renderer.loadCar(player.id, carFile);
+      await renderer.loadCar(player.id, carFile, stats.scaleMultiplier ?? 1);
+      if (player.id === playerCarId.value && stats.scaleMultiplier) {
+        renderer.setCameraScale(stats.scaleMultiplier);
+      }
 
       const startPos = {
         x: track.value.startPosition.x + i * 4,

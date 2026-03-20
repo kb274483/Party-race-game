@@ -13,6 +13,8 @@ export interface CarStats {
   turnSpeed: number;
   /** 車重（輕量 ~0.75、標準 1.0、重型 ~1.4）影響車對車碰撞結果 */
   weight: number;
+  /** 模型縮放倍率（預設 1.0，用於修正個別車型的視覺大小） */
+  scaleMultiplier?: number;
 }
 
 export interface CarDefinition {
@@ -63,6 +65,12 @@ export const CAR_REGISTRY: CarDefinition[] = [
     stats: { maxSpeed: 33, acceleration: 20, turnSpeed: 1.7, weight: 1.15 },
   },
   {
+    id: "muscle_two",
+    name: "美式肌肉車 II",
+    file: "/cars/muscle_two.glb",
+    stats: { maxSpeed: 34, acceleration: 19, turnSpeed: 1.6, weight: 1.2 },
+  },
+  {
     id: "police_muscle",
     name: "美式肌肉車＿警用塗裝",
     file: "/cars/police_muscle.glb",
@@ -75,6 +83,18 @@ export const CAR_REGISTRY: CarDefinition[] = [
     name: "小轎車",
     file: "/cars/sedan.glb",
     stats: { maxSpeed: 30, acceleration: 14, turnSpeed: 2.1, weight: 1.0 },
+  },
+  {
+    id: "hatchback",
+    name: "掀背車",
+    file: "/cars/hatchback.glb",
+    stats: { maxSpeed: 30, acceleration: 14, turnSpeed: 2.2, weight: 0.9 },
+  },
+  {
+    id: "limousine",
+    name: "豪華轎車",
+    file: "/cars/limousine.glb",
+    stats: { maxSpeed: 28, acceleration: 13, turnSpeed: 1.8, weight: 1.2, scaleMultiplier: 1.5 },
   },
   {
     id: "pickup",
@@ -107,5 +127,17 @@ export const CAR_REGISTRY: CarDefinition[] = [
     name: "卡車",
     file: "/cars/truck.glb",
     stats: { maxSpeed: 25, acceleration: 10, turnSpeed: 2.4, weight: 1.5 },
+  },
+  {
+    id: "truck_full",
+    name: "聯結卡車",
+    file: "/cars/truck_full.glb",
+    stats: {
+      maxSpeed: 23,
+      acceleration: 9,
+      turnSpeed: 2.2,
+      weight: 1.7,
+      scaleMultiplier: 2.5,
+    },
   },
 ];

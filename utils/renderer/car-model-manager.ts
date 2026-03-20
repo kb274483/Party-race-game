@@ -40,7 +40,11 @@ export class CarModelManager {
     });
   }
 
-  async loadCar(carId: string, carPath: string): Promise<void> {
+  async loadCar(
+    carId: string,
+    carPath: string,
+    scaleMultiplier = 1,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.loader.load(
         carPath,
@@ -48,8 +52,8 @@ export class CarModelManager {
           const carModel = gltf.scene;
           carModel.traverse((child) => {
             if (child instanceof THREE.Mesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
+              child.castShadow = false;
+              child.receiveShadow = false;
             }
           });
 
@@ -57,7 +61,9 @@ export class CarModelManager {
           const size = new THREE.Vector3();
           box.getSize(size);
           const length = Math.max(size.x, size.z, 0.001);
-          carModel.scale.setScalar(CAR_TARGET_LENGTH / length);
+          carModel.scale.setScalar(
+            (CAR_TARGET_LENGTH / length) * scaleMultiplier,
+          );
 
           const boxAfter = new THREE.Box3().setFromObject(carModel);
           this.carGroundOffsets.set(carId, -boxAfter.min.y + 2.8);
@@ -132,7 +138,6 @@ export class CarModelManager {
         bodyMat,
       );
       body.position.y = 0.9;
-      body.castShadow = true;
       group.add(body);
 
       for (let i = 0; i < 6; i++) {
@@ -170,17 +175,11 @@ export class CarModelManager {
 
     if (boosts.length === 0) return;
 
-    const diskMat = new THREE.MeshStandardMaterial({
-      color: 0xffd93d,
-      emissive: 0xffd93d,
-      emissiveIntensity: 0.3,
-      roughness: 0.4,
-    });
     const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xffd93d,
+      color: 0x3d85c6,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.9,
     });
 
     for (const boost of boosts) {
@@ -190,14 +189,6 @@ export class CarModelManager {
         boost.position.y + yOffset,
         boost.position.z,
       );
-
-      const disk = new THREE.Mesh(
-        new THREE.CylinderGeometry(boost.radius, boost.radius, 0.18, 32),
-        diskMat,
-      );
-      disk.position.y = 0.09;
-      disk.receiveShadow = true;
-      group.add(disk);
 
       const glow = new THREE.Mesh(
         new THREE.RingGeometry(boost.radius, boost.radius + 0.8, 32),

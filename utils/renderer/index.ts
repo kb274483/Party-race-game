@@ -79,11 +79,7 @@ export class GameRenderer {
     this.renderer.setPixelRatio(
       Math.min(window.devicePixelRatio, this.isMobile ? 1.5 : 2),
     );
-    this.renderer.shadowMap.enabled = true;
-    // 行動裝置用 BasicShadowMap（效能優先），桌面用 PCFSoftShadowMap（品質優先）
-    this.renderer.shadowMap.type = this.isMobile
-      ? THREE.BasicShadowMap
-      : THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = false;
     container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x5badec);
@@ -94,16 +90,6 @@ export class GameRenderer {
 
     this.sunLight = new THREE.DirectionalLight(0xffd93d, 1.2);
     this.sunLight.position.set(100, 200, 100);
-    this.sunLight.castShadow = true;
-    this.sunLight.shadow.camera.left = -500;
-    this.sunLight.shadow.camera.right = 500;
-    this.sunLight.shadow.camera.top = 500;
-    this.sunLight.shadow.camera.bottom = -500;
-    // 行動裝置 shadow map 512，桌面 1024（原本 2048）
-    const shadowMapSize = this.isMobile ? 512 : 1024;
-    this.sunLight.shadow.mapSize.width = shadowMapSize;
-    this.sunLight.shadow.mapSize.height = shadowMapSize;
-    this.sunLight.shadow.bias = -0.0005;
     this.scene.add(this.sunLight);
 
     this.fillLight = new THREE.DirectionalLight(0xc4b5fd, 0.4);
@@ -156,8 +142,7 @@ export class GameRenderer {
       this.sunLight.position.set(100, 300, 100);
       this.fillLight.color.set(0x90caf9);
       this.fillLight.intensity = 0.6;
-      // 空中跑道沒有地面承接陰影，關閉 shadow map + blob shadow
-      this.renderer.shadowMap.enabled = false;
+      // 空中跑道沒有地面承接陰影，關閉 blob shadow
       this.carManager.setSkyMode(true);
     }
     // 難度 1-3：白天模式，initialize() 預設值即正確，不需處理
@@ -187,8 +172,8 @@ export class GameRenderer {
 
   // ── Cars ───────────────────────────────────────────────────────
 
-  async loadCar(carId: string, carPath: string) {
-    return this.carManager.loadCar(carId, carPath);
+  async loadCar(carId: string, carPath: string, scaleMultiplier = 1) {
+    return this.carManager.loadCar(carId, carPath, scaleMultiplier);
   }
 
   renderObstacles(obstacles: Obstacle[], yOffset?: number) {
@@ -233,6 +218,11 @@ export class GameRenderer {
   }
 
   // ── Camera ─────────────────────────────────────────────────────
+
+  /** 依車輛縮放倍率調整跟隨鏡頭的距離與高度 */
+  setCameraScale(scale: number): void {
+    this.cameraOffset.set(0, CAMERA_HEIGHT * (scale*0.8), -CAMERA_DISTANCE * scale);
+  }
 
   updateCamera(targetCar: RaceCar): void {
     this._camCarPos.set(
