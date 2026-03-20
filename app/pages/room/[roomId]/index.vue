@@ -162,6 +162,7 @@ const difficultyOptions: { level: GameDifficulty; label: string; desc: string }[
   { level: 2, label: '等級二', desc: '地雷慢速移動' },
   { level: 3, label: '等級三', desc: '地雷快速移動' },
   { level: 4, label: '等級四', desc: '夜間模式 + 快速地雷' },
+  { level: 5, label: '等級五', desc: '空中跑道 + 跑道掉落' },
 ]
 
 // 房主變更難度時廣播給所有玩家

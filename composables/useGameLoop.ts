@@ -30,6 +30,24 @@ function getForwardVector(q: { x: number; y: number; z: number; w: number }) {
   };
 }
 
+/**
+ * 以起跑位置和車頭四元數計算應繞行正向
+ * 叉積 y 分量 = (startPos − center) × forward
+ * > 0 → 逆時針(+1)，< 0 → 順時針(−1)
+ */
+function computeForwardDirection(
+  startPos: { x: number; z: number },
+  centerX: number,
+  centerZ: number,
+  rotation: { x: number; y: number; z: number; w: number },
+): 1 | -1 {
+  const rx = startPos.x - centerX;
+  const rz = startPos.z - centerZ;
+  const fwd = getForwardVector(rotation);
+  const crossY = rx * fwd.z - rz * fwd.x;
+  return crossY >= 0 ? 1 : -1;
+}
+
 /** 四元數球面插值（SLERP），t 為 [0,1] */
 function quatSlerp(
   a: { x: number; y: number; z: number; w: number },
@@ -94,9 +112,9 @@ export function useGameLoop() {
 
   const isRunning = ref(false);
   const inputLocked = ref(true); // 初始鎖定輸入
+  const isRespawning = ref(false); // 空中跑道：重生動畫中
+  const isWrongWay = ref(false); // 逆向警告
   const lastTime = ref(0);
-  const targetFPS = 60;
-  const targetFrameTime = 1000 / targetFPS;
 
   let animationFrameId: number | null = null;
   let networkSendFn: ((car: RaceCar) => void) | null = null;
@@ -116,6 +134,8 @@ export function useGameLoop() {
    */
   let itemSeed: number | undefined;
   let gameDifficulty: GameDifficulty = 1;
+  let trackCenterX = 0;
+  let trackCenterZ = 0;
 
   const initialize = async (
     container: HTMLElement,
@@ -163,7 +183,11 @@ export function useGameLoop() {
   const loadTrackAssets = async () => {
     if (!renderer || !trackGenerator || !physics) return;
 
-    const trackData = await renderer.loadTrack("/blender/raceTrack.glb");
+    const skyMode = gameDifficulty === 5;
+    const trackData = await renderer.loadTrack(
+      "/blender/raceTrack.glb",
+      skyMode,
+    );
 
     track.value = trackGenerator.generateTrack(
       undefined,
@@ -172,6 +196,7 @@ export function useGameLoop() {
     );
 
     physics.setGroundLevel(track.value.bounds.min.y);
+    if (skyMode) physics.enableSkyMode();
 
     // 取得碰撞 mesh
     const collisionMeshes = renderer.getTrackSurfaceMeshes();
@@ -193,9 +218,9 @@ export function useGameLoop() {
     renderer.renderObstacles(track.value!.obstacles, yOffset);
     renderer.renderSpeedBoosts(track.value!.speedBoosts, yOffset);
 
-    const centerX = (track.value!.bounds.min.x + track.value!.bounds.max.x) / 2;
-    const centerZ = (track.value!.bounds.min.z + track.value!.bounds.max.z) / 2;
-    lapTracker = new LapTracker(centerX, centerZ);
+    trackCenterX = (track.value!.bounds.min.x + track.value!.bounds.max.x) / 2;
+    trackCenterZ = (track.value!.bounds.min.z + track.value!.bounds.max.z) / 2;
+    lapTracker = new LapTracker(trackCenterX, trackCenterZ);
 
     // 爆炸特效回呼
     setupExplosionCallback();
@@ -245,10 +270,19 @@ export function useGameLoop() {
       cars.value.set(player.id, car);
     }
 
-    // 為自己的車設定碰撞安全位置
+    // 為自己的車設定碰撞安全位置，並注入正向方向
     const ownCar = cars.value.get(playerCarId.value);
     if (ownCar && trackCollision) {
       trackCollision.setInitialSafePosition(ownCar.position);
+    }
+    if (ownCar && lapTracker) {
+      const dir = computeForwardDirection(
+        ownCar.position,
+        trackCenterX,
+        trackCenterZ,
+        ownCar.rotation,
+      );
+      lapTracker.setForwardDirection(dir);
     }
   };
 
@@ -284,6 +318,15 @@ export function useGameLoop() {
 
       if (trackCollision) {
         trackCollision.setInitialSafePosition(playerCar.position);
+      }
+      if (lapTracker) {
+        const dir = computeForwardDirection(
+          playerCar.position,
+          trackCenterX,
+          trackCenterZ,
+          playerCar.rotation,
+        );
+        lapTracker.setForwardDirection(dir);
       }
     } catch (error) {
       console.error("載入遊戲資源失敗:", error);
@@ -382,6 +425,44 @@ export function useGameLoop() {
   };
 
   /**
+   * 空中跑道：觸發重生
+   * 鎖定輸入 → 傳送至最後安全位置 → 短暫無敵 → 解鎖
+   */
+  const triggerRespawn = (car: RaceCar, groundY: number) => {
+    if (isRespawning.value) return;
+    isRespawning.value = true;
+    inputLocked.value = true;
+
+    const safePos = trackCollision?.getLastSafePosition();
+    if (safePos) {
+      car.position.x = safePos.x;
+      car.position.z = safePos.z;
+    }
+    // Y 直接用跑道表面高度，不用 safePos.y（避免偏差導致再次掉落）
+    car.position.y = groundY;
+
+    // 恢復掉落前在跑道上的車頭方向，不要保留掉落時轉向的方向
+    const safeRot = trackCollision?.getLastSafeRotation();
+    if (safeRot) {
+      car.rotation.x = safeRot.x;
+      car.rotation.y = safeRot.y;
+      car.rotation.z = safeRot.z;
+      car.rotation.w = safeRot.w;
+    }
+
+    car.velocity.x = 0;
+    car.velocity.y = 0;
+    car.velocity.z = 0;
+    car.speed = 0;
+
+    // 1.5 秒後解鎖（無敵時間）
+    setTimeout(() => {
+      isRespawning.value = false;
+      inputLocked.value = false;
+    }, 1500);
+  };
+
+  /**
    * 更新遊戲狀態
    */
   const update = (deltaTime: number) => {
@@ -428,8 +509,33 @@ export function useGameLoop() {
         track.value.playableBounds,
       );
 
-      // 賽道圍牆碰撞偵測
-      trackCollision?.applyWallCollision(playerCar);
+      // 賽道圍牆碰撞偵測（難度 5 改為掉落偵測）
+      if (gameDifficulty === 5 && track.value) {
+        const groundY = track.value.bounds.min.y;
+        const fallThresholdY = groundY - 80;
+
+        if (isRespawning.value) {
+          // 重生中：強制鎖住 Y 軸，防止重生後立刻再次下墜
+          playerCar.position.y = groundY;
+          playerCar.velocity.y = 0;
+        } else {
+          const fallState = trackCollision?.applyFallDetection(
+            playerCar,
+            fallThresholdY,
+            groundY,
+          );
+          if (fallState === "fallen") {
+            triggerRespawn(playerCar, groundY);
+          } else if (fallState === "safe") {
+            // 在跑道上：每幀把 Y 鎖回跑道表面，防止重力慢慢把車拉下去
+            playerCar.position.y = groundY;
+            playerCar.velocity.y = 0;
+          }
+          // fallState === 'falling'：車已離開邊緣，讓重力自然累積直到 fallen
+        }
+      } else {
+        trackCollision?.applyWallCollision(playerCar);
+      }
 
       // 車輛間碰撞偵測
       cars.value.forEach((remoteCar, remoteId) => {
@@ -453,6 +559,10 @@ export function useGameLoop() {
       if (newProgress !== lapProgress.value) lapProgress.value = newProgress;
       if (newScore !== score.value) score.value = newScore;
       playerCar.currentScore = newScore;
+
+      // 逆向偵測
+      const wrongWay = lapTracker?.isWrongWay() ?? false;
+      if (wrongWay !== isWrongWay.value) isWrongWay.value = wrongWay;
 
       // 檢查加速帶碰撞
       const boost = physics.checkSpeedBoostCollision(
@@ -494,6 +604,10 @@ export function useGameLoop() {
       if (newLapsB !== laps.value) laps.value = newLapsB;
       if (newProgressB !== lapProgress.value) lapProgress.value = newProgressB;
       if (newScoreB !== score.value) score.value = newScoreB;
+
+      // 逆向偵測（非物理權威玩家同樣需要）
+      const wrongWayB = lapTracker?.isWrongWay() ?? false;
+      if (wrongWayB !== isWrongWay.value) isWrongWay.value = wrongWayB;
     }
   };
 
@@ -670,6 +784,8 @@ export function useGameLoop() {
     setCarColor,
     dispose,
     isRunning,
+    isRespawning,
+    isWrongWay,
     track,
     cars,
     playerCarId,

@@ -12,6 +12,15 @@ export class LapTracker {
   private lastAngle: number | null = null;
   private cumulativeAngle = 0; // 累積角度（弧度）
 
+  /** 行進方向：+1 = 正向，-1 = 逆向，null = 尚未注入 */
+  private forwardDirection: 1 | -1 | null = null;
+
+  /** 近期 delta 滑動窗口，用於逆向偵測 */
+  private recentDeltas: number[] = [];
+  private recentDeltaSum = 0;
+  private readonly WRONG_WAY_WINDOW = 60; // 1 秒窗口
+  private readonly WRONG_WAY_THRESHOLD = 0.001; // 需有顯著移動才判定
+
   constructor(centerX: number, centerZ: number) {
     this.centerX = centerX;
     this.centerZ = centerZ;
@@ -29,9 +38,38 @@ export class LapTracker {
       if (delta > Math.PI) delta -= 2 * Math.PI;
       if (delta < -Math.PI) delta += 2 * Math.PI;
       this.cumulativeAngle += delta;
+
+      // 維護滑動窗口（避免 shift 改用手動 sum 管理）
+      this.recentDeltas.push(delta);
+      this.recentDeltaSum += delta;
+      if (this.recentDeltas.length > this.WRONG_WAY_WINDOW) {
+        this.recentDeltaSum -= this.recentDeltas.shift()!;
+      }
     }
 
     this.lastAngle = angle;
+  }
+
+  /**
+   * 是否正在逆向
+   * 需先確立正向方向，且近期平均移動方向與正向相反
+   */
+  isWrongWay(): boolean {
+    if (this.forwardDirection === null) return false;
+    if (this.recentDeltas.length < this.WRONG_WAY_WINDOW) return false;
+    const avg = this.recentDeltaSum / this.recentDeltas.length;
+    return (
+      Math.sign(avg) === -this.forwardDirection &&
+      Math.abs(avg) > this.WRONG_WAY_THRESHOLD
+    );
+  }
+
+  /**
+   * 直接注入正向（起跑時由外部以叉積計算後呼叫）
+   * 避免玩家起跑就倒退導致正向被錯誤學習
+   */
+  setForwardDirection(direction: 1 | -1): void {
+    this.forwardDirection = direction;
   }
 
   /** 完成的圈數 */

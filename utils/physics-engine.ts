@@ -17,6 +17,7 @@ export class PhysicsEngine {
   private readonly gravity = -9.8;
   private readonly friction = 0.95;
   private groundY = 0; // 地面高度（可依賽道模型設定）
+  private skyMode = false; // 空中跑道模式（停用 Y 軸鉗制，讓車輛真實下墜）
 
   /**
    * 地雷碰撞冷卻計時（key: `${carId}_${mineId}`, value: 冷卻結束時間 ms）
@@ -40,6 +41,13 @@ export class PhysicsEngine {
    */
   setGroundLevel(y: number): void {
     this.groundY = y;
+  }
+
+  /**
+   * 啟用空中跑道模式：停用 Y 軸鉗制，讓車輛在離開跑道後真實下墜
+   */
+  enableSkyMode(): void {
+    this.skyMode = true;
   }
 
   /**
@@ -76,8 +84,16 @@ export class PhysicsEngine {
       if (i === checkIdx && !isOnTrack!(mine.position)) {
         mine.velocity!.x = -mine.velocity!.x;
         mine.velocity!.z = -mine.velocity!.z;
-        mine.position.x = prevX;
-        mine.position.z = prevZ;
+        // 回退到上一個位置，再往反向（內部方向）多推固定距離
+        // 避免地雷在邊界來回震盪卡住
+        const speed =
+          Math.sqrt(
+            mine.velocity!.x * mine.velocity!.x +
+              mine.velocity!.z * mine.velocity!.z,
+          ) || 1;
+        const pushback = 3; // 固定推入 3 單位遠離邊緣
+        mine.position.x = prevX + (mine.velocity!.x / speed) * pushback;
+        mine.position.z = prevZ + (mine.velocity!.z / speed) * pushback;
         bounced = true;
       }
 
@@ -126,7 +142,8 @@ export class PhysicsEngine {
 
     this.updatePosition(car, deltaTime);
 
-    if (car.position.y < this.groundY) {
+    // 空中跑道模式：不鉗制 Y，讓車輛真實下墜（由 TrackCollisionSystem 偵測並重生）
+    if (!this.skyMode && car.position.y < this.groundY) {
       car.position.y = this.groundY;
       car.velocity.y = 0;
     }

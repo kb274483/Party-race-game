@@ -19,6 +19,7 @@ export class CarModelManager {
   /** renderObstacles 的 yOffset，供 ExplosionEffect 定位使用 */
   trackYOffset: number = 0;
   private nightMode: boolean = false;
+  private skyMode: boolean = false;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -28,6 +29,15 @@ export class CarModelManager {
   /** 啟用夜間模式（需在 loadCar / renderObstacles 之前呼叫） */
   setNightMode(enabled: boolean): void {
     this.nightMode = enabled;
+  }
+
+  /** 啟用空中跑道模式：隱藏 blob shadow（空中無地面，陰影沒有意義） */
+  setSkyMode(enabled: boolean): void {
+    this.skyMode = enabled;
+    // 已載入的車輛直接更新 shadow 可見性
+    this.carShadows.forEach((shadow) => {
+      shadow.visible = !enabled;
+    });
   }
 
   async loadCar(carId: string, carPath: string): Promise<void> {
@@ -71,6 +81,7 @@ export class CarModelManager {
           shadowMesh.rotation.x = -Math.PI / 2;
           shadowMesh.renderOrder = -1;
           this.scene.add(shadowMesh);
+          shadowMesh.visible = !this.skyMode;
           this.carShadows.set(carId, shadowMesh);
 
           resolve();
@@ -304,7 +315,7 @@ export class CarModelManager {
         0xffffff, // 暖白色
         10, // intensity
         80, // 照射距離
-        Math.PI * 0.16 ,
+        Math.PI * 0.16,
         0.3, // penumbra 柔化邊緣
         2, // decay
       );
@@ -326,7 +337,7 @@ export class CarModelManager {
         6, // 短範圍，只在車尾附近發光
         2, // decay
       );
-      taillight.position.set(xOffset, 1 , -2.3); 
+      taillight.position.set(xOffset, 1, -2.3);
       carModel.add(taillight);
       lights.push(taillight);
     }

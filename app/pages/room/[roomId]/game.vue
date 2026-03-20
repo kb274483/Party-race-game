@@ -57,6 +57,30 @@
         @back-to-room="handleBackToRoom"
       />
 
+      <!-- 空中跑道重生提示 -->
+      <Transition name="respawn-fade">
+        <div
+          v-if="isRespawning && gameStore.isRacing"
+          class="absolute inset-0 flex items-center justify-center pointer-events-none"
+        >
+          <div class="bg-black/70 text-white font-black text-2xl px-8 py-4 rounded-xl tracking-widest animate-pulse">
+            掉落！重生中...
+          </div>
+        </div>
+      </Transition>
+
+      <!-- 逆向警告 -->
+      <Transition name="respawn-fade">
+        <div
+          v-if="isWrongWay && gameStore.isRacing"
+          class="absolute top-24 inset-x-0 flex items-center justify-center pointer-events-none"
+        >
+          <div class="bg-red-600/90 text-white font-black text-3xl px-10 py-3 rounded-xl tracking-widest animate-pulse shadow-lg">
+            ⚠️ 走錯邊囉！
+          </div>
+        </div>
+      </Transition>
+
       <!-- 斷線通知 -->
       <GameDisconnect :names="disconnectedPlayerNames" />
 
@@ -157,6 +181,8 @@ function roomIdToSeed(id: string): number {
 const score = gameLoop.score
 const laps = gameLoop.laps
 const lapProgress = gameLoop.lapProgress
+const isRespawning = gameLoop.isRespawning
+const isWrongWay = gameLoop.isWrongWay
 
 function controlLabel(controls: string[]): string {
   const labels: Record<string, string> = {
@@ -588,5 +614,14 @@ onBeforeUnmount(() => {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   touch-action: none;
+}
+
+.respawn-fade-enter-active,
+.respawn-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.respawn-fade-enter-from,
+.respawn-fade-leave-to {
+  opacity: 0;
 }
 </style>

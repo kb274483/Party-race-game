@@ -24,7 +24,10 @@ export class TrackLoader {
     return new THREE.Box3().setFromObject(group);
   }
 
-  async loadTrack(trackPath: string): Promise<{
+  async loadTrack(
+    trackPath: string,
+    skyMode = false,
+  ): Promise<{
     bounds: BoundingBox;
     startPosition: { x: number; y: number; z: number } | null;
     startRotation: { x: number; y: number; z: number; w: number } | null;
@@ -34,10 +37,34 @@ export class TrackLoader {
         trackPath,
         (gltf) => {
           this.trackModel = gltf.scene;
+
+          // 空中跑道模式：隱藏所有非跑道面的 mesh，跑道面換上特殊材質
+          const skyTrackMaterial = skyMode
+            ? new THREE.MeshStandardMaterial({
+                color: 0x9e9e9e,
+                emissive: 0x000000,
+                emissiveIntensity: 0,
+                roughness: 0.7,
+                metalness: 0.1,
+                side: THREE.DoubleSide,
+              })
+            : null;
+
           this.trackModel.traverse((child) => {
             if (child instanceof THREE.Mesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
+              const isSurface = child.name.startsWith("Mesh006");
+              if (skyMode) {
+                if (isSurface) {
+                  child.material = skyTrackMaterial!;
+                  child.castShadow = false;
+                  child.receiveShadow = true;
+                } else {
+                  child.visible = false;
+                }
+              } else {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
             }
           });
 

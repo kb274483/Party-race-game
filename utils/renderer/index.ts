@@ -145,14 +145,28 @@ export class GameRenderer {
       this.sunLight.position.set(-100, 200, -100);
       this.fillLight.intensity = 0;
       this.carManager.setNightMode(true);
+    } else if (difficulty === 5) {
+      // 空中跑道：高空晴天，能見度遠，讓玩家看得到掉落軌跡
+      this.scene.background = new THREE.Color(0x1565c0);
+      this.scene.fog = new THREE.Fog(0x1565c0, 600, 1500);
+      this.ambientLight.color.set(0xffffff);
+      this.ambientLight.intensity = 1.4;
+      this.sunLight.color.set(0xffffff);
+      this.sunLight.intensity = 1.5;
+      this.sunLight.position.set(100, 300, 100);
+      this.fillLight.color.set(0x90caf9);
+      this.fillLight.intensity = 0.6;
+      // 空中跑道沒有地面承接陰影，關閉 shadow map + blob shadow
+      this.renderer.shadowMap.enabled = false;
+      this.carManager.setSkyMode(true);
     }
     // 難度 1-3：白天模式，initialize() 預設值即正確，不需處理
   }
 
   // ── Track ──────────────────────────────────────────────────────
 
-  async loadTrack(trackPath: string) {
-    return this.trackLoader.loadTrack(trackPath);
+  async loadTrack(trackPath: string, skyMode = false) {
+    return this.trackLoader.loadTrack(trackPath, skyMode);
   }
 
   async loadColliderMesh(colliderPath: string) {

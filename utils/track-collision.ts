@@ -23,6 +23,18 @@ export class TrackCollisionSystem {
   private lastSafePosition: Vector3 = { x: 0, y: 0, z: 0 };
   private hasSafePosition = false;
 
+  /** 深入跑道內部的安全位置（供空中跑道重生使用，避免重生在邊緣）*/
+  private lastInteriorPosition: Vector3 = { x: 0, y: 0, z: 0 };
+  private hasInteriorPosition = false;
+  /** 內部安全檢查半徑：周圍 8 個方向都在跑道上才算「安全內部」*/
+  private readonly INTERIOR_SPREAD = 5;
+  /** 內部位置更新節流計數器（每 30 幀才做一次 8 條 raycast）*/
+  private interiorCheckCounter = 0;
+
+  /** 最後安全位置對應的車頭旋轉（重生時恢復方向）*/
+  private lastSafeRotation = { x: 0, y: 0, z: 0, w: 1 };
+  private lastInteriorRotation = { x: 0, y: 0, z: 0, w: 1 };
+
   /** 暖機幀數：讓車輛先移動進入有幾何體的區域再啟動碰撞 */
   private warmupFrames = 180;
 
@@ -41,6 +53,26 @@ export class TrackCollisionSystem {
   setInitialSafePosition(position: Vector3): void {
     this.lastSafePosition = { ...position };
     this.hasSafePosition = true;
+    // 不預設 lastInteriorPosition：讓它在實際行駛後才被驗證設定
+    // 避免起跑點永遠被當成重生點
+  }
+
+  /**
+   * 確認位置周圍 8 方向都在跑道內（半徑 INTERIOR_SPREAD），
+   * 確保重生點不會太靠近邊緣
+   */
+  private isInteriorPosition(pos: Vector3): boolean {
+    const r = this.INTERIOR_SPREAD;
+    return (
+      this.raycastPoint(pos.x + r, pos.y, pos.z) &&
+      this.raycastPoint(pos.x - r, pos.y, pos.z) &&
+      this.raycastPoint(pos.x, pos.y, pos.z + r) &&
+      this.raycastPoint(pos.x, pos.y, pos.z - r) &&
+      this.raycastPoint(pos.x + r, pos.y, pos.z + r) &&
+      this.raycastPoint(pos.x - r, pos.y, pos.z - r) &&
+      this.raycastPoint(pos.x + r, pos.y, pos.z - r) &&
+      this.raycastPoint(pos.x - r, pos.y, pos.z + r)
+    );
   }
 
   /**
@@ -85,6 +117,87 @@ export class TrackCollisionSystem {
       this.raycastPoint(position.x, position.y, position.z + s) ||
       this.raycastPoint(position.x, position.y, position.z - s)
     );
+  }
+
+  /**
+   * 空中跑道模式：偵測車輛是否離開跑道面
+   * 離開跑道時不推回，回傳狀態讓外部決定是否觸發掉落與重生
+   *
+   * 回傳值：
+   *   'safe'   — 在跑道上，持續更新安全位置
+   *   'falling' — 已離開跑道面，車子應開始下墜
+   *   'fallen'  — Y 低於 fallThresholdY，觸發重生
+   */
+  applyFallDetection(
+    car: RaceCar,
+    fallThresholdY: number,
+    trackSurfaceY: number,
+  ): "safe" | "falling" | "fallen" {
+    if (this.trackMeshes.length === 0) return "safe";
+
+    // 暖機期：持續更新安全位置但不觸發掉落
+    if (this.warmupFrames > 0) {
+      this.warmupFrames--;
+      if (this.raycastPoint(car.position.x, car.position.y, car.position.z)) {
+        this.lastSafePosition = { ...car.position };
+        this.hasSafePosition = true;
+      }
+      return "safe";
+    }
+
+    // Y 已低於閾值 → 直接觸發重生
+    if (car.position.y < fallThresholdY) {
+      this.offTrackFrames = 0;
+      return "fallen";
+    }
+
+    // 車輛 Y 已明顯低於跑道面 → 確認為掉落
+    // 防止 XZ 仍在跑道 mesh 上方時 isOnTrack 誤判 safe，造成 Y 軸鎖回震盪
+    if (car.position.y < trackSurfaceY - 3) {
+      return "falling";
+    }
+
+    const onTrack = this.isOnTrack(car.position);
+
+    if (onTrack) {
+      if (this.raycastPoint(car.position.x, car.position.y, car.position.z)) {
+        this.lastSafePosition = { ...car.position };
+        this.lastSafeRotation = { ...car.rotation };
+        this.hasSafePosition = true;
+        // 每 30 幀才做內部位置檢查（8 條 raycast），避免每幀開銷過重
+        this.interiorCheckCounter = (this.interiorCheckCounter + 1) % 30;
+        if (
+          this.interiorCheckCounter === 0 &&
+          this.isInteriorPosition(car.position)
+        ) {
+          this.lastInteriorPosition = { ...car.position };
+          this.lastInteriorRotation = { ...car.rotation };
+          this.hasInteriorPosition = true;
+        }
+      }
+      this.offTrackFrames = 0;
+      return "safe";
+    }
+
+    // 離開跑道：累積幀數（防止接縫誤判），未達閾值前還是 safe
+    this.offTrackFrames++;
+    if (this.offTrackFrames < this.OFF_TRACK_THRESHOLD) return "safe";
+
+    return "falling";
+  }
+
+  /** 取得重生安全位置：優先回傳深入跑道內部的點，避免重生在邊緣造成二次掉落 */
+  getLastSafePosition(): Vector3 | null {
+    if (this.hasInteriorPosition) return { ...this.lastInteriorPosition };
+    if (this.hasSafePosition) return { ...this.lastSafePosition };
+    return null;
+  }
+
+  /** 取得重生時應恢復的車頭旋轉（掉落前在跑道上的方向）*/
+  getLastSafeRotation(): { x: number; y: number; z: number; w: number } | null {
+    if (this.hasInteriorPosition) return { ...this.lastInteriorRotation };
+    if (this.hasSafePosition) return { ...this.lastSafeRotation };
+    return null;
   }
 
   /**

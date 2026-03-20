@@ -52,7 +52,7 @@ export interface RaceCar {
   currentScore: number; // 當前分數
 }
 
-export type GameDifficulty = 1 | 2 | 3 | 4;
+export type GameDifficulty = 1 | 2 | 3 | 4 | 5;
 
 export interface Obstacle {
   id: string;
