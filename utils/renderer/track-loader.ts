@@ -8,6 +8,29 @@ import type { BoundingBox } from "../../types/game";
 
 const TRACK_TARGET_SIZE = 700;
 
+/**
+ * 移除牆壁三角形（|avgY| > threshold），保留跑道面（法線接近橫向，|avgY| < threshold）。
+ */
+function removeWallTriangles(mesh: THREE.Mesh, threshold = 0.3): void {
+  const geo = mesh.geometry;
+  const normals = geo.attributes.normal?.array as Float32Array | undefined;
+  const indexAttr = geo.index;
+  if (!normals || !indexAttr) return;
+
+  const src = indexAttr.array;
+  const kept: number[] = [];
+  for (let i = 0; i < src.length; i += 3) {
+    const a = src[i],
+      b = src[i + 1],
+      c = src[i + 2];
+    const avgY =
+      (normals[a! * 3 + 1]! + normals[b! * 3 + 1]! + normals[c! * 3 + 1]!) / 3;
+    if (Math.abs(avgY) < threshold) kept.push(a!, b!, c!);
+  }
+  geo.setIndex(kept);
+  geo.clearGroups();
+}
+
 export class TrackLoader {
   private trackModel: THREE.Group | null = null;
   private colliderModel: THREE.Group | null = null;
@@ -55,6 +78,7 @@ export class TrackLoader {
               const isSurface = child.name.startsWith("Mesh006");
               if (skyMode) {
                 if (isSurface) {
+                  removeWallTriangles(child);
                   child.material = skyTrackMaterial!;
                   child.castShadow = false;
                   child.receiveShadow = true;
